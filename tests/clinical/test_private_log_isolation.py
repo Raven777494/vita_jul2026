@@ -28,7 +28,12 @@ def test_private_logger_does_not_attach_victoria_shipper() -> None:
 
 
 def test_app_logger_attaches_victoria_shipper_when_enabled(monkeypatch) -> None:
-    monkeypatch.setenv("ENABLE_VICTORIA_LOGS_SHIPPER", "true")
+    import app.logger as logger_module
+    from app import config
+
+    monkeypatch.setattr(config, "ENABLE_VICTORIA_LOGS_SHIPPER", True)
+    monkeypatch.setattr(config, "VICTORIA_LOGS_URL", "http://127.0.0.1:9428")
+    monkeypatch.setattr(logger_module, "_victoria_ship_handler", None)
     logger = setup_logger(
         "test_app_ship",
         "app",

@@ -6,6 +6,7 @@ connects to docker/postgres (vita-postgres), not a plain local PostgreSQL.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -124,6 +125,13 @@ def verify_platform_engine(
     return report
 
 
+def _is_ci_without_platform_db() -> bool:
+    """True when CI has no Docker Platform Engine Postgres (GitHub Actions or explicit opt-out)."""
+    if os.getenv("DB_PLATFORM_ENGINE_REQUIRED", "true").lower() != "true":
+        return True
+    return os.getenv("GITHUB_ACTIONS", "").lower() == "true"
+
+
 def verify_platform_engine_or_skip(
     db_manager: Optional[Any] = None,
     *,
@@ -146,4 +154,6 @@ def verify_platform_engine_or_skip(
 
     if report.ok:
         return "PASS", report
+    if _is_ci_without_platform_db():
+        return "SKIP", report
     return "FAIL", report
