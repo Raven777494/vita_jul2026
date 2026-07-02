@@ -1,5 +1,3 @@
-version: '3.9'
-
 # 【Engine7B Platform Engine】PostgreSQL / Redis / 可觀測性基礎設施
 # 不負責：LLM 推理（Compute Engine）、對話邏輯（Logic Engine）
 

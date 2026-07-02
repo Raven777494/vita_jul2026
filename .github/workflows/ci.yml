@@ -32,14 +32,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      # Testing profile: non-production defaults come from app/config.py.
+      # No secret literals here (see docs security rule 3; GitHub Encrypted
+      # Secrets are used only by deploy.yml).
       CI: "true"
       GITHUB_ACTIONS: "true"
       ENV: "testing"
       VITA_USE_COMPOSE_CI: "1"
       DB_PLATFORM_ENGINE_REQUIRED: "false"
       ENABLE_VICTORIA_LOGS_SHIPPER: "false"
-      SECRET_KEY: "ci-test-secret-key-not-for-production"
-      JWT_SECRET: "ci-test-jwt-secret-not-for-production"
 
     steps:
       - name: Checkout repository
