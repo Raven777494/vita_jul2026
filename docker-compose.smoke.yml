@@ -1,0 +1,10 @@
+# Smoke / CD override — minimal Platform stack for deploy workflow (P3-5).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.smoke.yml --env-file config/.env.compose.ci up -d postgres redis vita-api
+
+services:
+  vita-api:
+    image: ${VITA_API_IMAGE:-vita-api:latest}
+    environment:
+      ENABLE_VICTORIA_LOGS_SHIPPER: "false"
+      DB_PLATFORM_ENGINE_REQUIRED: "false"

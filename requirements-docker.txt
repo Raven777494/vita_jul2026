@@ -1,0 +1,4 @@
+# Docker runtime image (vita-api) — HTTP LLM clients only; no llama-cpp GPU build.
+# Seele / Emobloom run on the Compute Engine host (seele_v8_5.py), not inside vita-api.
+
+-r requirements-ci.txt

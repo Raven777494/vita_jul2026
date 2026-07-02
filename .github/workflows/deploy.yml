@@ -1,4 +1,4 @@
-# GitHub Actions deploy workflow skeleton for VITA (engine7b)
+# GitHub Actions deploy workflow for VITA (engine7b) — P3-5 build + smoke + optional host deploy
 #
 # Security rules (mandatory):
 #   1. Only Verified Creator actions from the `actions` organization.
@@ -9,7 +9,7 @@
 # Verified actions used:
 #   - actions/checkout@v4
 #
-# Before first deploy: configure repository/environment secrets listed in docs/operations/deploy.md
+# Configure secrets: docs/operations/deploy.md
 
 name: Deploy
 
@@ -25,7 +25,7 @@ on:
           - staging
           - production
       dry_run:
-        description: Validate compose config only (no host deploy)
+        description: Runner smoke only (skip SSH host deploy)
         required: true
         default: true
         type: boolean
@@ -34,9 +34,79 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  build-and-smoke:
+    name: Build and smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare compose env for smoke
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          N8N_BASIC_AUTH_USER: ${{ secrets.N8N_BASIC_AUTH_USER }}
+          N8N_BASIC_AUTH_PASSWORD: ${{ secrets.N8N_BASIC_AUTH_PASSWORD }}
+          N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ENCRYPT_KEY: ${{ secrets.ENCRYPT_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            cp config/.env.compose.ci config/.env.compose
+            echo "[OK] Smoke using config/.env.compose.ci (dry_run=true)"
+          else
+            python scripts/deploy/write_compose_env.py --from-env --require-all
+          fi
+
+      - name: Build Platform Engine Postgres image
+        run: docker compose --env-file config/.env.compose build postgres
+
+      - name: Build vita-api image
+        run: |
+          docker build -t "vita-api:${{ github.sha }}" -t vita-api:latest .
+
+      - name: Start smoke stack (postgres, redis, vita-api)
+        env:
+          VITA_API_IMAGE: vita-api:${{ github.sha }}
+        run: |
+          docker compose \
+            --env-file config/.env.compose \
+            -f docker-compose.yml \
+            -f docker-compose.smoke.yml \
+            up -d postgres redis vita-api --no-build --wait
+
+      - name: Run smoke checks
+        run: bash scripts/deploy/smoke_check.sh
+
+      - name: Tear down smoke stack
+        if: always()
+        run: |
+          docker compose \
+            --env-file config/.env.compose \
+            -f docker-compose.yml \
+            -f docker-compose.smoke.yml \
+            down -v --remove-orphans || true
+          rm -f config/.env.compose
+
+  deploy-host:
+    name: Deploy to host
+    needs: build-and-smoke
+    if: inputs.dry_run == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: ${{ inputs.environment }}
 
     steps:
@@ -62,19 +132,35 @@ jobs:
           ENCRYPT_KEY: ${{ secrets.ENCRYPT_KEY }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           API_KEY: ${{ secrets.API_KEY }}
-        run: |
-          python scripts/deploy/write_compose_env.py --from-env --require-all
+        run: python scripts/deploy/write_compose_env.py --from-env --require-all
 
-      - name: Validate docker compose configuration
-        run: docker compose --env-file config/.env.compose config --quiet
-
-      - name: Deploy to target host (placeholder)
-        if: inputs.dry_run == false
+      - name: Configure SSH key
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
-          echo "Deploy step not implemented in skeleton."
-          echo "Target environment: ${{ inputs.environment }}"
-          echo "Implement: SSH or self-hosted runner, docker compose pull/up, health smoke."
-          echo "Rollback: redeploy previous image digest or restore prior config/.env.compose snapshot."
+          printf '%s\n' "${DEPLOY_KEY}" > "${RUNNER_TEMP}/deploy_key"
+          chmod 600 "${RUNNER_TEMP}/deploy_key"
+          echo "DEPLOY_KEY_PATH=${RUNNER_TEMP}/deploy_key" >> "${GITHUB_ENV}"
+
+      - name: Build vita-api image for host
+        run: docker build -t "vita-api:${{ github.sha }}" .
+
+      - name: Stream image to deploy host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          USER="${DEPLOY_USER:-deploy}"
+          docker save "vita-api:${{ github.sha }}" | gzip | ssh -i "${DEPLOY_KEY_PATH}" -o StrictHostKeyChecking=accept-new "${USER}@${DEPLOY_HOST}" "gunzip | docker load"
+
+      - name: Deploy via SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          GIT_SHA: ${{ github.sha }}
+        run: bash scripts/deploy/ssh_compose_deploy.sh
 
       - name: Remove generated compose env from runner
         if: always()

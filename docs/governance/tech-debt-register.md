@@ -13,6 +13,7 @@ Review: monthly or each release candidate
 | TD-006 | docker-compose dev secrets in YAML | Medium | P1 | Closed P2-B | Secrets moved to `config/.env.compose`; compose uses `${VAR}` only; deploy.yml skeleton |
 | TD-007 | Dependency CVE tracking (pip-audit CI gate) | Medium | P1 | Closed P1 | Green gate via fastapi 0.135.0 / starlette 1.3.1 / python-jose 3.5.0 |
 | TD-008 | Monitoring dashboards not codified | Low | P2 | Partial P2-C | Crisis interception metrics + Grafana/LogsQL alerts in repo |
+| TD-009 | Deploy CD host registry optional | Low | P3 | Partial P3-5 | GHA build+smoke; SSH image stream; registry push optional follow-up |
 
 ## Clinical debt (linked)
 
