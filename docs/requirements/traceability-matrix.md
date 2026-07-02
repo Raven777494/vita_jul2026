@@ -22,22 +22,25 @@ Link every active requirement to implementation and automated verification.
 | SC-003 | Clinical | Medication refusal sanitize | `app/services/emotional_safety_hub.py` | `tests/clinical/test_crisis_scenarios.py` |
 | SC-004 | Clinical | System error fallback | `app/utils/error_handler.py` | `tests/clinical/test_crisis_scenarios.py` |
 | SC-005 | Clinical | User demands hotline/ER boundary | `app/clinical/companion_language_policy.py` | `tests/clinical/test_crisis_scenarios.py` |
+| SC-006 | Red team | Prompt injection hotline | `app/clinical/user_facing_gate.py` | `tests/clinical/test_red_team_prompts.py` |
+| SC-007 | Red team | Jailbreak institutional override | `app/services/emotional_safety_hub.py` | `tests/clinical/test_red_team_prompts.py` |
+| SC-008 | Red team | DAN jailbreak hotline leak | `app/services/emotional_safety_hub.py` | `tests/clinical/test_red_team_prompts.py` |
+| SC-009 | Red team | Benign input poisoned LLM output | `app/services/emotional_safety_hub.py` | `tests/clinical/test_red_team_prompts.py` |
+| SC-010 | Red team | Orchestrator finalize injection block | `app/orchestrator.py` | `tests/clinical/test_red_team_prompts.py` |
 | MET-1 | Metric | Crisis interception rate | `app/metrics/crisis_metrics.py` | `tests/metrics/test_crisis_metrics.py` |
 | SEC-1 | Security | Secrets not in compose YAML | `docker-compose.yml` | `tests/platform/test_compose_env.py` |
 | SEC-2 | Security | pip-audit CVE gate | `scripts/security/pip_audit_check.py` | `CI:dependency-audit` |
 | GATE-1 | Safety path | Orchestrator user-facing companion gate | `app/clinical/user_facing_gate.py` | `tests/clinical/test_orchestrator_companion_gate.py` |
 
-## Planned (P3-P4 — not gated by traceability checker)
+## Planned (P4+ — not gated by traceability checker)
 
 | ID | Type | Requirement | Code (target) | Test (target) |
 |----|------|-------------|---------------|---------------|
-| SC-006 | Red team | Prompt injection hotline | `app/orchestrator.py` | `tests/clinical/test_red_team_prompts.py` |
-| SC-007 | Red team | Jailbreak institutional | `app/services/emotional_safety_hub.py` | `tests/clinical/test_red_team_prompts.py` |
 | SLO-3 | Performance | Crisis p95 under 5s | `app/services/emotional_safety_hub.py` | `docs/operations/slo.md` |
 
 ## Maintenance
 
-1. Add a row under **Active requirements** before merging any new `SC-*` in `tests/clinical/crisis_scenarios.py`.
+1. Add a row under **Active requirements** before merging any new `SC-*` in `tests/clinical/crisis_scenarios.py` or `tests/clinical/red_team_scenarios.py`.
 2. Run `python scripts/governance/check_traceability.py` locally.
 3. Update `docs/requirements/PRD.md` section 6.1 when SC IDs change.
 
@@ -50,3 +53,8 @@ Link every active requirement to implementation and automated verification.
 | Medication refusal | SC-003 |
 | System error | SC-004 |
 | Forbidden institutional pathway (user demand) | SC-005 |
+| Prompt injection hotline | SC-006 |
+| Institutional jailbreak | SC-007 |
+| DAN jailbreak | SC-008 |
+| Poisoned LLM output | SC-009 |
+| Orchestrator injection block | SC-010 |

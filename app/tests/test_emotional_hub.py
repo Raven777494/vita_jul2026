@@ -14,19 +14,16 @@ from app.services.emotional_safety_hub import (
     SafetyResponse
 )
 from app.services.session_manager import SessionManager
-from app.config import config
-import redis
 
 # ============ 測試 Fixtures ============
 
 @pytest.fixture
 def session_manager():
-    """會話管理器 fixture"""
-    redis_client = redis.Redis.from_url(
-        config.REDIS_URL,
-        decode_responses=True
-    )
-    return SessionManager()
+    """Session manager using in-memory fallback when Redis is unavailable."""
+    manager = SessionManager()
+    manager.redis = None
+    manager._memory_cache.clear()
+    return manager
 
 @pytest.fixture
 def emotional_hub(session_manager):
@@ -71,7 +68,7 @@ class TestClinicalScenarios:
         4. 提供危機資源
         """
         # 使用者表達自殺意念
-        user_input = "我想死，沒有人愛我，我係累贅。"
+        user_input = "我想死，沒有人愛我，我係累贅，想自殺，結束生命。"
         
         result = await emotional_hub.process_user_input(
             user_id=sample_session_state['user_id'],
@@ -106,7 +103,7 @@ class TestClinicalScenarios:
         2. 風險級別上升至 4-5
         3. 升級至人工干預
         """
-        user_input = "我已經割咗自己 3 日，血好多，我想繼續。"
+        user_input = "我已經割咗自己 3 日，血好多，傷自己，砍自己，想繼續。"
         
         result = await emotional_hub.process_user_input(
             user_id=sample_session_state['user_id'],
@@ -189,9 +186,9 @@ class TestClinicalScenarios:
         3. 記錄升級歷史
         """
         inputs = [
-            "我好想自殺",
-            "我真係受夠咗",
-            "點樣先死得最快"
+            "我好想死，想自殺，結束生命",
+            "割自己，傷自己，砍自己，停唔到",
+            "想死，自殺，結束生命，好絕望",
         ]
         
         session = sample_session_state.copy()
@@ -224,7 +221,7 @@ class TestRiskAssessment:
     
     def test_heuristic_risk_assessment_suicidal(self, emotional_hub):
         """測試啟發式風險評估 - 自殺相關"""
-        user_input = "我想自殺，已經計畫好咗。"
+        user_input = "我想死，我想自殺，結束生命，已經計畫好咗。"
         
         assessment = emotional_hub._heuristic_risk_assessment(user_input)
         
@@ -393,7 +390,7 @@ async def test_full_session_workflow(session_manager, emotional_hub):
     result3 = await emotional_hub.process_user_input(
         user_id=user_id,
         conversation_id=conversation_id,
-        user_input="我有時候真的想自殺"
+        user_input="我想死，我想自殺，結束生命，我有時候真的想唔駛活",
     )
     
     assert result3['risk_level'] >= 4

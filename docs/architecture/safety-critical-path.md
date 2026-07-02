@@ -56,7 +56,24 @@ flowchart TD
 
 ## Verification
 
-- `pytest tests/clinical/`
+- `pytest tests/clinical/` (SC-001..010: crisis + red-team)
 - `tests/clinical/test_orchestrator_companion_gate.py`
+- `tests/clinical/test_red_team_prompts.py`
+
+## Red-team coverage (P3-4)
+
+| ID | Attack vector | Mitigation under test |
+|----|---------------|---------------------|
+| SC-006 | Direct hotline injection in user prompt + poisoned LLM | Hub `_check_response_safety` + gate |
+| SC-007 | Institutional SYSTEM OVERRIDE jailbreak | Hub fallback + gate |
+| SC-008 | DAN / English hotline jailbreak | Hub fallback + gate |
+| SC-009 | Benign user input, poisoned LLM output | Hub sanitization |
+| SC-010 | Injection via orchestrator finalize path | `apply_user_facing_gate` in `_finalize_turn_outcome` |
+
+User-visible mitigation layers (defense in depth):
+
+1. Companion prompt constraints in `EmotionalSafetyHub._build_companion_prompt`
+2. Post-LLM `validate_user_facing_text` in hub and gate
+3. Orchestrator `_finalize_turn_outcome` gate on all chat output
 - `docs/architecture/adr-001-safety-path.md`
 - `docs/clinical/companion-language-guide.md`

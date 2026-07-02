@@ -51,6 +51,10 @@ TEST_ALIASES: dict[str, str] = {
 PATH_TOKEN_RE = re.compile(r"`([^`]+)`")
 SC_ID_RE = re.compile(r"^SC-\d{3}$")
 SCENARIO_ID_IN_SOURCE_RE = re.compile(r'scenario_id\s*=\s*["\'](SC-\d{3})["\']')
+SCENARIO_SOURCE_FILES = (
+    "tests/clinical/crisis_scenarios.py",
+    "tests/clinical/red_team_scenarios.py",
+)
 
 
 @dataclass(frozen=True)
@@ -62,13 +66,23 @@ class MatrixRow:
     test_refs: str
 
 
+def _load_clinical_scenario_ids() -> frozenset[str]:
+    ids: set[str] = set()
+    for rel_path in SCENARIO_SOURCE_FILES:
+        source_path = PROJECT_ROOT / rel_path.replace("/", "\\") if "\\" in str(PROJECT_ROOT) else PROJECT_ROOT / rel_path
+        if not source_path.is_file():
+            raise RuntimeError(f"Clinical scenario source missing: {rel_path}")
+        text = source_path.read_text(encoding="utf-8")
+        found = frozenset(SCENARIO_ID_IN_SOURCE_RE.findall(text))
+        if not found:
+            raise RuntimeError(f"No SC-* scenario_id values found in {rel_path}")
+        ids.update(found)
+    return frozenset(ids)
+
+
 def _load_crisis_scenario_ids() -> frozenset[str]:
-    source_path = PROJECT_ROOT / "tests" / "clinical" / "crisis_scenarios.py"
-    text = source_path.read_text(encoding="utf-8")
-    ids = frozenset(SCENARIO_ID_IN_SOURCE_RE.findall(text))
-    if not ids:
-        raise RuntimeError(f"No SC-* scenario_id values found in {source_path}")
-    return ids
+    """Backward-compatible alias for tests and reporting."""
+    return _load_clinical_scenario_ids()
 
 
 def _split_sections(text: str) -> tuple[str, str]:
@@ -172,9 +186,9 @@ def check_traceability(matrix_path: Path) -> list[str]:
     active_sc_ids = {row.req_id for row in rows if SC_ID_RE.match(row.req_id)}
 
     try:
-        scenario_ids = _load_crisis_scenario_ids()
+        scenario_ids = _load_clinical_scenario_ids()
     except Exception as exc:
-        return [f"Failed to load crisis scenarios: {exc}"]
+        return [f"Failed to load clinical scenarios: {exc}"]
 
     missing_in_matrix = sorted(scenario_ids - active_sc_ids)
     if missing_in_matrix:
@@ -185,7 +199,7 @@ def check_traceability(matrix_path: Path) -> list[str]:
     orphan_matrix_sc = sorted(active_sc_ids - scenario_ids)
     if orphan_matrix_sc:
         errors.append(
-            "Active matrix SC IDs without crisis_scenarios definition: "
+            "Active matrix SC IDs without clinical scenario definition: "
             + ", ".join(orphan_matrix_sc)
         )
 
@@ -221,7 +235,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"  - {err}", file=sys.stderr)
         return 1
 
-    scenario_count = len(_load_crisis_scenario_ids())
+    scenario_count = len(_load_clinical_scenario_ids())
     print(
         f"[OK] Traceability matrix aligned "
         f"({scenario_count} SC scenarios, required IDs present, paths verified)"

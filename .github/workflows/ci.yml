@@ -67,13 +67,14 @@ jobs:
       - name: Verify requirements traceability matrix
         run: python scripts/governance/check_traceability.py
 
-      - name: Run clinical language policy tests
+      - name: Run clinical and red-team tests (SC-001..010)
         run: python -m pytest tests/clinical/ -q --tb=short
 
-      - name: Run compose env loading tests
-        env:
-          VITA_USE_COMPOSE_CI: "1"
-        run: python -m pytest tests/platform/test_compose_env.py -q --tb=short
+      - name: Run emotional hub integration tests (mock LLM)
+        run: python -m pytest app/tests/test_emotional_hub.py -q --tb=short
+
+      - name: Run platform integration tests
+        run: python -m pytest tests/platform/ -q --tb=short
 
       - name: Run crisis interception metrics tests
         run: python -m pytest tests/metrics/test_crisis_metrics.py -q --tb=short

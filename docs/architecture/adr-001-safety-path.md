@@ -23,7 +23,7 @@ Risk: LLM or navigator output could reach users without `validate_user_facing_te
 1. **Policy source of truth:** `app/clinical/companion_language_policy.py`
 2. **User-facing gate (mandatory):** `app/clinical/user_facing_gate.py`  
    All orchestrator chat outcomes pass through `apply_user_facing_gate()` in `_finalize_turn_outcome`.
-3. **Crisis hub path:** `EmotionalSafetyHub` remains the dedicated crisis pipeline (tests SC-001..005).
+3. **Crisis hub path:** `EmotionalSafetyHub` remains the dedicated crisis pipeline (tests SC-001..010).
 4. **SafetyService:** Internal-only (risk metadata, n8n). Must not emit user chat text.
 5. **Safe fallbacks:** `_get_safe_reply()` uses `get_companion_reply()` then gate.
 
@@ -39,12 +39,12 @@ Risk: LLM or navigator output could reach users without `validate_user_facing_te
 
 - Navigator direct callers outside orchestrator should also use gate (currently orchestrator wraps all API chat)
 - `SafetyService` remains in codebase for future n8n integration; not deleted in P3-3
-- P3-4 red-team tests still recommended for prompt injection
+- P3-4 red-team tests (SC-006..010) merged; ongoing model prompt hardening (TD-004)
 
 ## Verification
 
 ```powershell
-python -m pytest tests/clinical/test_orchestrator_companion_gate.py tests/clinical/ -q
+python -m pytest tests/clinical/test_red_team_prompts.py tests/clinical/ -q
 python scripts/governance/check_traceability.py
 ```
 
