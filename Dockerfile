@@ -17,9 +17,9 @@ COPY compose_env.py hardware_profile_loader.py vita_core_config.py ./
 COPY app app/
 COPY PersonalityModule PersonalityModule/
 COPY config config/
-COPY dict dict/
 
-RUN mkdir -p /app/logs /app/cache /app/data /app/models
+# dict/ is gitignored (rime-cantonese data); optional volume mount at runtime.
+RUN mkdir -p /app/logs /app/cache /app/data /app/models /app/dict
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=20s \
     CMD curl -f http://localhost:8080/health || exit 1

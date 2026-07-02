@@ -171,6 +171,13 @@ Steps performed:
 
 - `Dockerfile` uses `requirements-docker.txt` (no llama-cpp build; LLM inference runs on Compute Engine host).
 - Root modules `compose_env.py`, `hardware_profile_loader.py`, `vita_core_config.py` are copied into the image (required by `app/config.py` and `app/main.py`).
+- `dict/` (rime-cantonese) is **not** in git; the image creates an empty `/app/dict`. Mount host data for full Cantonese dictionary lookup:
+
+```yaml
+# optional in docker-compose override
+volumes:
+  - ./dict:/app/dict:ro
+```
 
 ## Related
 
