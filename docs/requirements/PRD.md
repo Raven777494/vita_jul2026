@@ -1,7 +1,7 @@
 # VITA Product Requirements Document (PRD)
 
-Version: 0.1 (P0)  
-Status: Draft for professional governance baseline
+Version: 1.0 (P3-2)  
+Status: Approved engineering baseline (clinical advisor sign-off: CD-002)
 
 ## 1. Product identity
 
@@ -60,6 +60,8 @@ Policy source of truth for user-facing crisis text:
 
 `app/clinical/companion_language_policy.py`
 
+Requirements traceability: `docs/requirements/traceability-matrix.md` (enforced in CI).
+
 ## 6. Success metrics (P0)
 
 - 100% of `COMPANION_SAFE_REPLIES` pass `validate_user_facing_text`
@@ -104,4 +106,5 @@ Tests: `python -m pytest tests/metrics/test_crisis_metrics.py -q`
 - `docs/security/threat-model.md`
 - `docs/architecture/three-engines.md`
 - `docs/governance/tech-debt-register.md`
+- `docs/requirements/traceability-matrix.md`
 - `tests/clinical/test_companion_language_policy.py`

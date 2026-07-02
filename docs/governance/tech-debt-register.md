@@ -16,10 +16,10 @@ Review: monthly or each release candidate
 
 ## Clinical debt (linked)
 
-| ID | Item | Risk |
-|----|------|------|
-| CD-001 | Expand clinical scenario test suite beyond language policy | High | In progress | P2-A: `tests/clinical/test_crisis_scenarios.py` (SC-001..005) |
-| CD-002 | Clinical advisor sign-off process | Medium |
+| ID | Item | Risk | Priority | Target | Notes |
+|----|------|------|----------|--------|-------|
+| CD-001 | Expand clinical scenario test suite beyond language policy | High | P2 | Partial P3-2 | SC-001..005 + traceability CI gate |
+| CD-002 | Clinical advisor sign-off process | Medium | P2 | P6 | PRD v1.0 engineering baseline approved; formal sign-off pending |
 
 ## Related
 

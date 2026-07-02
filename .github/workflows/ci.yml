@@ -54,6 +54,9 @@ jobs:
       - name: Scan for accidental secrets in tracked files
         run: python scripts/security/scan_secrets.py
 
+      - name: Verify requirements traceability matrix
+        run: python scripts/governance/check_traceability.py
+
       - name: Run clinical language policy tests
         run: python -m pytest tests/clinical/ -q --tb=short
 
@@ -64,6 +67,9 @@ jobs:
 
       - name: Run crisis interception metrics tests
         run: python -m pytest tests/metrics/test_crisis_metrics.py -q --tb=short
+
+      - name: Run governance traceability tests
+        run: python -m pytest tests/governance/ -q --tb=short
 
       - name: Run system alignment checker
         run: python app/tests/system_alignment_checker.py

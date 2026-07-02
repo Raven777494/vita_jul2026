@@ -13,6 +13,8 @@
 ## Checklist
 
 - [ ] CI passes locally or on PR (`test-and-alignment`, `dependency-audit`)
+- [ ] Traceability matrix updated if SC-* or US-* requirements changed (`docs/requirements/traceability-matrix.md`)
+- [ ] `python scripts/governance/check_traceability.py` passes
 - [ ] No secrets in code or workflow YAML
 - [ ] User-facing crisis text reviewed against `docs/clinical/companion-language-guide.md`
 - [ ] If DB/schema change: `init-db/` or migration documented in PR
