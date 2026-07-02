@@ -1,10 +1,32 @@
 # Smoke / CD override — minimal Platform stack for deploy workflow (P3-5).
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.smoke.yml --env-file config/.env.compose.ci up -d postgres redis vita-api
+#
+# Uses an isolated Redis volume so smoke is not blocked by a corrupted dev redis_data AOF.
 
 services:
+  redis:
+    volumes:
+      - redis_smoke_data:/data
+
   vita-api:
     image: ${VITA_API_IMAGE:-vita-api:latest}
     environment:
+      ENV: testing
       ENABLE_VICTORIA_LOGS_SHIPPER: "false"
       DB_PLATFORM_ENGINE_REQUIRED: "false"
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPT_KEY: ${ENCRYPT_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      API_KEY: ${API_KEY}
+    volumes:
+      - smoke_logs:/app/logs
+      - smoke_data:/app/data
+
+volumes:
+  redis_smoke_data:
+    driver: local
+  smoke_logs:
+    driver: local
+  smoke_data:
+    driver: local

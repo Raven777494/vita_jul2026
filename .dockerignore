@@ -1,0 +1,27 @@
+# Docker build context exclusions (P3-5)
+.git
+.github
+.engine7b
+__pycache__
+*.pyc
+.pytest_cache
+htmlcov
+logs
+cache
+data
+models
+node_modules
+llama-cpp-python
+
+# Never bake local secrets or generated compose env into vita-api image
+config/.env.local
+config/.env.compose
+config/.env
+.env
+.env.local
+
+# Test / docs not needed in runtime image
+tests
+app/tests
+docs
+*.md

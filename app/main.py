@@ -888,6 +888,7 @@ async def prometheus_metrics():
     """Prometheus scrape endpoint (VictoriaMetrics / Grafana)."""
     if not getattr(config, "ENABLE_METRICS", True):
         raise HTTPException(status_code=404, detail="Metrics disabled")
+    import app.metrics.crisis_metrics  # noqa: F401 — register vita_crisis_* counters
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

@@ -35,6 +35,44 @@ bash scripts/deploy/smoke_check.sh
 docker compose --env-file config/.env.compose.ci -f docker-compose.yml -f docker-compose.smoke.yml down -v
 ```
 
+## Troubleshooting
+
+### Redis unhealthy / `Bad file format reading the append only file`
+
+Dev `redis_data` volume AOF can corrupt after unclean shutdown. Smoke uses **`redis_smoke_data`** (see `docker-compose.smoke.yml`) to avoid that; always pass both compose files for smoke.
+
+Recovery for full dev stack:
+
+```powershell
+docker compose --env-file config/.env.compose down
+docker volume rm engine7b_redis_data
+docker compose --env-file config/.env.compose up -d redis
+```
+
+Volume name prefix matches the project directory (`engine7b_redis_data` when run from `engine7b`).
+
+### vita-api unhealthy / `Invalid JWT_SECRET for production`
+
+The image must not include `config/.env.local` (see `.dockerignore`). Smoke sets `ENV=testing` and passes secrets from `--env-file`.
+
+Rebuild after pulling fixes:
+
+```powershell
+docker build -t vita-api:local .
+docker compose --env-file config/.env.compose.ci -f docker-compose.yml -f docker-compose.smoke.yml up -d postgres redis vita-api --no-build --force-recreate
+bash scripts/deploy/smoke_check.sh
+```
+
+`status=degraded` on `/health` is expected when LLM hosts are offline; smoke only requires HTTP 200 and `vita_crisis` in `/metrics`.
+
+### `POSTGRES_USER is required` on compose commands
+
+Always pass `--env-file config/.env.compose` or `config/.env.compose.ci`:
+
+```powershell
+docker compose --env-file config/.env.compose.ci logs redis
+```
+
 ## GitHub Actions: Deploy workflow
 
 Workflow: `.github/workflows/deploy.yml`
