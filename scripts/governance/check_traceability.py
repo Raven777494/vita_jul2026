@@ -37,6 +37,7 @@ REQUIRED_ACTIVE_IDS = frozenset(
         "MET-1",
         "SEC-1",
         "SEC-2",
+        "GATE-1",
     }
 )
 

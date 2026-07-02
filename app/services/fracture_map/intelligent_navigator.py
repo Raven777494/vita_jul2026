@@ -411,9 +411,17 @@ class IntelligentNavigator:
         return response
 
     def _get_safe_reply(self, response_type: str = 'fallback') -> str:
-        """取得安全回應（引導式同行者語言）"""
+        """Return companion-safe navigator fallback (ADR-001 gate)."""
         from app.clinical.companion_language_policy import get_companion_reply
-        return get_companion_reply(response_type)
+        from app.clinical.user_facing_gate import apply_user_facing_gate
+
+        reply = get_companion_reply(response_type)
+        risk_hint = 5 if response_type == 'critical' else 4 if response_type == 'high_risk' else 1
+        return apply_user_facing_gate(
+            reply,
+            risk_level=risk_hint,
+            source=f"navigator_get_safe_reply:{response_type}",
+        ).text
 
     def get_stats(self) -> Dict[str, Any]:
         """取得統計數據"""

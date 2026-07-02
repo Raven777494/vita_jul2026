@@ -1,4 +1,8 @@
 # app/services/safety_service.py
+#
+# INTERNAL OPERATIONS ONLY (ADR-001): risk scoring and n8n webhook alerts.
+# Must NOT generate or route user-visible chat text. User-facing crisis path:
+#   EmotionalSafetyHub + companion_language_policy + orchestrator user_facing_gate.
 
 import requests
 import json
@@ -12,13 +16,10 @@ logger = logging.getLogger(__name__)
 
 class SafetyService:
     """
-    安全守護服務
-    
-    功能：
-    1. 危機檢測（關鍵詞 + 情緒雙重判斷）
-    2. 風險等級分類（0-5）
-    3. n8n 自動警報觸發（危機 → Telegram 通知）
-    4. 完整審計日誌
+    Internal safety analysis service (non-user-facing).
+
+    Used for operational risk scoring and optional n8n alerts — not the chat
+    companion response path. See ADR-001 and EmotionalSafetyHub for user text.
     """
     
     # 危機風險等級定義

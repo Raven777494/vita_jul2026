@@ -4,7 +4,7 @@ from app.services.db_manager import DatabaseManager, db_manager, get_session, cl
 from app.services.db_service import DBService
 from app.services.llm_service import LLMService
 from app.services.emotion_service import EmotionService
-from app.services.safety_service import SafetyService
+from app.services.safety_service import SafetyService  # internal-only; ADR-001
 from app.services.vector_service import VectorService
 from app.services.hko_service import HKOService
 from app.services.memory_store import MemoryStore

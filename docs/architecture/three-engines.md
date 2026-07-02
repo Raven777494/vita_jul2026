@@ -54,7 +54,7 @@ flowchart LR
 ## Design rules
 
 1. Platform credentials only in `config/.env.compose` (see `docs/security/secrets-policy.md`)
-2. User-facing crisis text only via companion language policy
+2. User-facing crisis text only via companion language policy + orchestrator gate (ADR-001)
 3. Private logs never shipped to VictoriaLogs
 
 See [safety-critical-path.md](safety-critical-path.md) and [../security/threat-model.md](../security/threat-model.md).

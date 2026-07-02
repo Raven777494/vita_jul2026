@@ -1215,12 +1215,12 @@ class Orchestrator:
     # ==================== 安全回應（完整版） ====================
 
     def _get_safe_reply(self, response_type: str = 'system_error') -> str:
-        """[FIX-BUG-004] 取得安全降級回應（確保長度 > 10）"""
+        """Return companion-safe fallback text (policy + user-facing gate)."""
         from app.clinical.companion_language_policy import get_companion_reply
+        from app.clinical.user_facing_gate import apply_user_facing_gate
 
         reply = get_companion_reply(response_type)
 
-        # 確保最小長度
         if len(reply.strip()) <= 10:
             self.logger.error({
                 "event": "safe_reply_too_short",
@@ -1229,7 +1229,19 @@ class Orchestrator:
             })
             reply = get_companion_reply('fallback')
 
-        return reply
+        risk_hint = 5 if response_type == 'critical' else 4 if response_type == 'high_risk' else 1
+        gate = apply_user_facing_gate(
+            reply,
+            risk_level=risk_hint,
+            source=f"orchestrator_get_safe_reply:{response_type}",
+        )
+        if gate.sanitized:
+            self.logger.warning({
+                "event": "companion_gate_safe_reply_sanitized",
+                "response_type": response_type,
+                "issues": list(gate.issues),
+            })
+        return gate.text
 
     async def _generate_draft_response(
         self,
@@ -1542,6 +1554,28 @@ class Orchestrator:
                 result['metadata']['response_quality'] = 'degraded'
             else:
                 result['metadata']['response_quality'] = 'ok'
+
+        from app.clinical.user_facing_gate import apply_user_facing_gate
+
+        gate = apply_user_facing_gate(
+            text,
+            risk_level=risk_level,
+            source="orchestrator_finalize_turn",
+        )
+        if gate.sanitized:
+            result['metadata']['companion_gate_sanitized'] = True
+            result['metadata']['response_quality'] = 'degraded'
+            result['warnings'].append(
+                "Response sanitized by companion user-facing gate"
+            )
+            self.logger.warning({
+                "event": "companion_gate_sanitized",
+                "session_id": session_id,
+                "risk_level": risk_level,
+                "issue_count": len(gate.issues),
+                "fallback_tier": gate.fallback_tier,
+            })
+            text = gate.text
 
         return text
 

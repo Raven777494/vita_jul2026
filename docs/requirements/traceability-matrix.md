@@ -25,6 +25,7 @@ Link every active requirement to implementation and automated verification.
 | MET-1 | Metric | Crisis interception rate | `app/metrics/crisis_metrics.py` | `tests/metrics/test_crisis_metrics.py` |
 | SEC-1 | Security | Secrets not in compose YAML | `docker-compose.yml` | `tests/platform/test_compose_env.py` |
 | SEC-2 | Security | pip-audit CVE gate | `scripts/security/pip_audit_check.py` | `CI:dependency-audit` |
+| GATE-1 | Safety path | Orchestrator user-facing companion gate | `app/clinical/user_facing_gate.py` | `tests/clinical/test_orchestrator_companion_gate.py` |
 
 ## Planned (P3-P4 — not gated by traceability checker)
 
