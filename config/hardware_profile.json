@@ -1,0 +1,54 @@
+{
+  "_comment": "RTX 4070 Ti SUPER 16GB + 192GB RAM. Reserve 20% VRAM for TTS + VTube Studio.",
+  "machine_id": "rtx4070tisuper_192gb",
+  "vram_total_mb": 16384,
+  "vram_reserve_percent": 20,
+  "vram_budget_mb": 13107,
+  "ram_total_mb": 196608,
+  "deployment_mode": "host_seele",
+  "gpu_strategy": "nemo_primary_gpu_others_cpu",
+  "services": {
+    "main_llm": {
+      "port": 8081,
+      "gpu_layers": 40,
+      "n_threads": 8,
+      "n_ctx": 2048,
+      "priority_level": "critical",
+      "notes": "Primary GPU consumer (~7-8GB VRAM). Soul / Seele Core."
+    },
+    "revise_llm": {
+      "port": 8082,
+      "gpu_layers": 0,
+      "n_threads": 6,
+      "n_ctx": 1024,
+      "priority_level": "important",
+      "conditional": true,
+      "notes": "CPU on 192GB RAM. Star revise / future Meta Auditor."
+    },
+    "logic_llm": {
+      "port": 8083,
+      "gpu_layers": 0,
+      "n_threads": 4,
+      "n_ctx": 2048,
+      "priority_level": "important",
+      "conditional": true,
+      "notes": "CPU. Star draft / future Character Layer."
+    },
+    "memory_llm": {
+      "port": 8084,
+      "gpu_layers": 0,
+      "n_threads": 4,
+      "n_ctx": 1024,
+      "priority_level": "important",
+      "notes": "CPU. BGE-M3 embedding only."
+    },
+    "emobloom_llm": {
+      "port": 8085,
+      "gpu_layers": 0,
+      "n_threads": 6,
+      "n_ctx": 1024,
+      "priority_level": "important",
+      "notes": "CPU. Emotion cortex; 192GB RAM sufficient."
+    }
+  }
+}

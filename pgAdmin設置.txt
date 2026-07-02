@@ -1,0 +1,136 @@
+https://www.youtube.com/watch?v=3YnNkm3RDMI
+
+-----
+正確連線資訊（PostgreSQL 預設）
+欄位,正確值
+User,postgres
+Password,0000（您安裝時設的密碼）
+Host,localhost
+Port,5432
+Database,postgres（先連預設資料庫）
+------
+欄位,填入
+Server Name,Local Engine7a
+Host,localhost
+Port,5432
+Database,postgres
+User,postgres
+Password,0000
+------
+Database name：engine7a
+Owner：postgres
+------
+步驟 3：啟用 pgvector 擴展
+
+點擊左側 engine7a 資料庫
+點上方 「Query Tool」
+貼上並執行（按 F5）：
+
+-- 啟用 pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 驗證
+SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
+
+------
+extname | extversion
+---------+------------
+ vector  | 0.8.1
+
+------
+
+修改 D:\Desktop\engine7a\configs\.env
+PG_DSN=postgresql+psycopg2://postgres:0000@localhost:5432/engine7a
+
+使用者：postgres
+密碼：0000
+資料庫：engine7a
+------
+PostgreSQL + pgvector
+https://github.com/pgvector/pgvector
+
+pw:0000
+Port:5432
+------
+登入
+C:\Users\crows>psql -U postgres -d postgres
+
+---------------
+下載pgvector 0.8.1 
+前往 https://github.com/pgvector/pgvector/releases/tag/v0.8.1
+
+:: 1. 設定 PostgreSQL 安裝路徑（媽媽幫你寫好，你只需確認路徑）
+set "PGROOT=C:\Program Files\PostgreSQL\18"
+
+:: 2. 進入你解壓嘅 pgvector 資料夾（改成你嘅路徑）
+cd /d C:\temp\pgvector
+
+:: 3. 編譯（會見到一堆訊息，耐心等 1-2 分鐘）
+nmake /f Makefile.win
+
+按 Win + R，輸入 services.msc，按 Enter。
+喺服務列表搵 postgresql-x64-18（或 postgresql-x64-18 - PostgreSQL Server）。
+右鍵 → 停止（等佢完全停咗，狀態變「已停止」）。
+
+第二步：重新跑安裝指令
+回到你嘅 x64 Native Tools Command Prompt 視窗（以管理員跑），輸入：
+batchcd /d C:\temp\pgvector
+nmake /f Makefile.win install
+
+今次會成功！ 你會見到：textcopy vector.dll "C:\Program Files\PostgreSQL\18\lib"
+複製了 1 個檔案。
+copy vector.control "C:\Program Files\PostgreSQL\18\share\extension\"
+複製了 1 個檔案。
+copy vector--0.8.1.sql "C:\Program Files\PostgreSQL\18\share\extension\"
+複製了 1 個檔案。
+
+第三步：重啟 PostgreSQL 服務
+返去 services.msc，右鍵 postgresql-x64-18 → 啟動。
+第四步：驗證 pgvector 已更新到 0.8.1
+開 cmd 或 psql，輸入：
+batchpsql -U postgres -c "\dx"
+
+你會見到：textvector    | 0.8.1   | public     | vector data type and ivfflat and hnsw access methods
+
+------------
+下載預編譯 pgvector 0.8.1 for PostgreSQL 18 Windows：
+去 https://github.com/andreiramani/pgvector_pgsql_windows/releases/tag/0.8.1_18.0.2
+下載 vector.dll、vector.control 同所有 vector--*.sql 檔案（zip 入面有）。
+
+停止 PostgreSQL 服務（services.msc → postgresql-x64-18 → 停止）。
+複製檔案：
+vector.dll copy 到 C:\Program Files\PostgreSQL\18\lib\
+vector.control 同所有 vector--*.sql copy 到 C:\Program Files\PostgreSQL\18\share\extension\
+
+-------------------
+開 psql -U postgres，貼以下指令：SQLDROP EXTENSION IF EXISTS vector CASCADE;
+CREATE EXTENSION vector;
+\dx
+
+第一步：強制 DROP 舊索引（清除殘留）
+開 psql -U postgres，貼以下指令：
+SQL-- 強制刪除舊索引（安全，因為會重新建）
+DROP INDEX IF EXISTS idx_embeddings_hnsw CASCADE;
+DROP INDEX IF EXISTS idx_emovec_hnsw CASCADE;
+
+-- 重新 CREATE EXTENSION（保險起見）
+DROP EXTENSION IF EXISTS vector CASCADE;
+CREATE EXTENSION vector;
+\dx
+
+確認仲係 vector 0.8.1！
+-----------
+第一步：在 psql 內強制註冊 ip_ops 運算子（最關鍵！）
+開 psql -U postgres，貼以下指令（一行一行執行）：
+SQL-- 強制重新載入 vector 定義，讓 ip_ops 運算子出現
+DROP EXTENSION IF EXISTS vector CASCADE;
+CREATE EXTENSION vector;
+
+-- 手動註冊 ip_ops（Windows 18 必要步驟）
+CREATE OPERATOR CLASS vector_ip_ops
+DEFAULT FOR TYPE vector USING hnsw AS OPERATOR 1 <-> (vector, vector) FOR ORDER BY float_ops;
+
+-- 驗證運算子已存在
+SELECT opcname FROM pg_opclass WHERE opcname = 'vector_ip_ops';
+----------------------------------------
+D:\Desktop\engine7b> python -c "from app.services.db import init_db; init_db()"

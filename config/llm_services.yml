@@ -1,0 +1,175 @@
+version: "1.0.0"
+description: "Vita LLM Services Configuration - Single Source of Truth v10.0.0"
+
+# 全局設定
+global:
+  base_host_local: "127.0.0.1"
+  base_host_docker: "localhost"
+  enable_health_check: true
+  health_check_interval: 30
+  health_check_timeout: 10
+
+# LLM 服務定義 - 統一命名與配置 (對齐 docker-compose.yml)
+# 環境變數與管線職責: MAIN=soul, REVISE=revise, LOGIC=logic, MEMORY=embedding, EMOBLOOM=emotion
+services:
+  main_llm:
+    display_name: "Main LLM (Mistral-Nemo-12B)"
+    description: "Primary response generator (v9 Nemo / SoulEngine)"
+    pipeline_role: "primary_generate"
+    port: 8081
+    model_path: "models/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf"
+    model_name: "Mistral-Nemo-12B"
+    
+    # 計算資源
+    compute:
+      gpu_layers: 40
+      n_threads: 8
+      n_ctx: 2048
+      timeout_seconds: 120
+    
+    # 容器配置
+    docker:
+      hostname: "main-llm"
+      container_name: "vita-main-llm"
+      image: "vita-main-llm:latest"
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: "12G"
+        reservations:
+          cpus: "2.0"
+          memory: "8G"
+    
+    # 優先級
+    priority: 1
+    priority_level: "critical"
+    type: "llm"
+
+  revise_llm:
+    display_name: "Revise LLM (Llama-3.2-3B)"
+    description: "Conditional Meta Auditor (v9 / ReviseEngine); REVISE_LLM_URL :8082"
+    pipeline_role: "meta_audit"
+    port: 8082
+    model_path: "models/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+    model_name: "Llama-3.2-3B"
+    
+    compute:
+      gpu_layers: 0
+      n_threads: 6
+      n_ctx: 1024
+      timeout_seconds: 30
+    
+    docker:
+      hostname: "revise-llm"
+      container_name: "vita-revise-llm"
+      image: "vita-revise-llm:latest"
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "6G"
+        reservations:
+          cpus: "1.0"
+          memory: "3G"
+    
+    priority: 2
+    priority_level: "critical"
+    type: "llm"
+
+  logic_llm:
+    display_name: "Logic LLM (Distil-NPC-gemma-3-1b)"
+    description: "Character personality layer (v9 Gemma / LogicEngine)"
+    pipeline_role: "personality"
+    port: 8083
+    model_path: "models/Distil-NPC-gemma-3-1b-it-Q4_K_M-imat.gguf"
+    model_name: "Distil-NPC-gemma-3-1b"
+    
+    compute:
+      gpu_layers: 0
+      n_threads: 4
+      n_ctx: 2048
+      timeout_seconds: 30
+    
+    docker:
+      hostname: "logic-llm"
+      container_name: "vita-logic-llm"
+      image: "vita-logic-llm:latest"
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "6G"
+        reservations:
+          cpus: "1.0"
+          memory: "3G"
+    
+    priority: 3
+    priority_level: "important"
+    type: "llm"
+
+  memory_llm:
+    display_name: "Memory LLM (BGE-M3)"
+    description: "Semantic embedding and memory retrieval (VectorService)"
+    pipeline_role: "memory"
+    port: 8084
+    model_path: "BAAI/bge-m3"
+    model_name: "bge-m3"
+    
+    compute:
+      gpu_layers: 0
+      n_threads: 4
+      n_ctx: 1024
+      timeout_seconds: 20
+    
+    docker:
+      hostname: "memory-llm"
+      container_name: "vita-memory-llm"
+      image: "vita-memory-llm:latest"
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "4G"
+        reservations:
+          cpus: "1.0"
+          memory: "2G"
+    
+    priority: 5
+    priority_level: "important"
+    type: "embedding"
+
+  emobloom_llm:
+    display_name: "Emobloom LLM (Emobloom-7b)"
+    description: "Emotional state recognition (EmotionService)"
+    pipeline_role: "emotion"
+    port: 8085
+    model_path: "models/Emobloom-7b.i1-Q5_K_M.gguf"
+    model_name: "Emobloom-7b"
+    
+    compute:
+      gpu_layers: 0
+      n_threads: 6
+      n_ctx: 1024
+      timeout_seconds: 10
+    
+    docker:
+      hostname: "emobloom-llm"
+      container_name: "vita-emobloom-llm"
+      image: "vita-emobloom-llm:latest"
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "6G"
+        reservations:
+          cpus: "1.0"
+          memory: "3G"
+    
+    priority: 4
+    priority_level: "important"
+    type: "emotion_proxy"
+
+# 服務發現配置
+service_discovery:
+  enabled: true
+  health_check_endpoint: "/health"
+  retry_policy:
+    max_retries: 3
+    retry_delay_seconds: 1
+    backoff_multiplier: 2

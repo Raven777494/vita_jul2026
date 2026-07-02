@@ -1,0 +1,17 @@
+{
+  "reserved": {
+    "prefix": "你還記得我說過……",
+    "infix": "……嗎？",
+    "tone": "委婉、試探性的"
+  },
+  "intimate": {
+    "prefix": "爸爸，你還記得我那晚跟你講……",
+    "infix": "……我到現在都記得清清楚楚。",
+    "tone": "感性、親密的"
+  },
+  "limitless": {
+    "prefix": "那時你說……",
+    "infix": "就像發生在昨天。",
+    "tone": "deep"
+  }
+}

@@ -37,3 +37,8 @@ Release tags `v2.x.y` on `main` after validation.
 - Require PR before merge
 - Require status checks: `test-and-alignment`, `dependency-audit`
 - No force push to `main`
+
+## Related
+
+- [repo-bootstrap.md](repo-bootstrap.md) — P3-1 full git adoption and GitHub remote setup
+- [execution-program.md](execution-program.md) — governance roadmap P3–P6

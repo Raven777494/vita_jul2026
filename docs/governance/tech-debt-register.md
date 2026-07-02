@@ -21,6 +21,11 @@ Review: monthly or each release candidate
 | CD-001 | Expand clinical scenario test suite beyond language policy | High | In progress | P2-A: `tests/clinical/test_crisis_scenarios.py` (SC-001..005) |
 | CD-002 | Clinical advisor sign-off process | Medium |
 
+## Related
+
+- [execution-program.md](execution-program.md) — roadmap to close all 12 governance gaps (P3–P6)
+- [RACI.md](RACI.md)
+
 ## Closed (P0)
 
 | ID | Item | Closed |

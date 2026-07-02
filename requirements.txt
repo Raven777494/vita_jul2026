@@ -1,0 +1,68 @@
+# Web Framework
+fastapi==0.135.0
+uvicorn[standard]==0.34.0
+starlette==1.3.1
+
+# 數據驗證
+pydantic==2.8.2
+pydantic-settings==2.4.0
+annotated-types==0.7.0
+typing-extensions==4.15.0
+pydantic-core==2.20.1
+
+# 數據庫
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.11
+alembic==1.14.0
+
+# 向量與記憶
+chromadb==0.4.14
+numpy==2.3.5
+
+# Redis 快取會話狀態
+redis
+
+# HTTP
+requests==2.33.0
+httpx==0.27.0
+
+# 環境配置
+python-dotenv==1.2.2
+structlog==24.1.0
+
+# 日誌
+python-json-logger==3.3.0
+
+# 時區
+pytz==2024.2
+tzdata==2025.2
+
+# 安全
+python-jose==3.5.0
+pyasn1==0.6.3
+passlib==1.7.4
+bcrypt==4.2.1
+
+# YAML
+pyyaml==6.0.2
+
+# 測試
+pytest==8.3.3
+pytest-asyncio
+
+# LLM 與推理
+aiohttp==3.14.1
+
+pgvector
+psutil
+asyncpg
+urllib3==2.7.0
+prometheus-client==0.16.0
+python-multipart==0.0.31
+cryptography==44.0.2
+greenlet==3.1.1
+sentence-transformers==2.3.0
+llama-cpp-python[server]
+bc-jce-jdk15on==1.68; platform_system == 'Java'
+
+pandas==2.2.3

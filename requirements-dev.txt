@@ -1,0 +1,2 @@
+# Development and CI security tooling (not installed in production runtime image)
+pip-audit==2.7.3

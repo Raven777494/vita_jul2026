@@ -1,0 +1,61 @@
+{
+  "title": "希兒陪伴監控 - 概覽",
+  "tags": ["hii", "monitoring"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "title": "系統狀態（近5分鐘日誌數）",
+      "type": "stat",
+      "datasource": {
+        "type": "victoriametrics-victorialogs-datasource",
+        "uid": "victorialogs"
+      },
+      "targets": [
+        {
+          "expr": "count_over_time({container_name=~\"vita-.*\"}[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "value"
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 }
+    },
+    {
+      "title": "危機事件率（最近1小時）",
+      "type": "timeseries",
+      "datasource": {
+        "type": "victoriametrics-victorialogs-datasource",
+        "uid": "victorialogs"
+      },
+      "targets": [
+        {
+          "expr": "rate(({container_name=~\"vita-.*\"} AND (level=~\"error|err|critical|warn\" OR message=~\"危機|自傷|絕望\"))[5m])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": {} },
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 0 }
+    }
+  ],
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m"] },
+  "refresh": "10s"
+}

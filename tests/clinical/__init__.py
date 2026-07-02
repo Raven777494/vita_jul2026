@@ -1,0 +1,1 @@
+# Clinical automated tests package

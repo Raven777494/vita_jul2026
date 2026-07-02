@@ -1,0 +1,38 @@
+# config/vector.yaml
+sources:
+  docker:
+    type: docker_logs
+    namespace: vita
+    
+  files:
+    type: file
+    include:
+      - /var/log/vita/app.log
+      - /var/log/vita/llm.log
+      - /var/log/vita/vector.log
+
+transforms:
+  parse_json:
+    type: remap
+    inputs:
+      - docker
+    source: |
+      . = parse_json!(string!(.message))
+      .container_name = get_source_type_name!()
+
+sinks:
+  victorialogs:
+    type: http
+    inputs:
+      - parse_json
+    uri: http://victorialogs:9428/insert/jsonline
+    encoding:
+      codec: json
+
+  redis:
+    type: redis
+    inputs:
+      - parse_json
+    namespace: vita
+    key: "logs:{{ container_name }}"
+    data_dir: /var/lib/vector

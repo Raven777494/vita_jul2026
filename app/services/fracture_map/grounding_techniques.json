@@ -1,0 +1,52 @@
+{
+  "techniques": [
+    {
+      "id": "5-4-3-2-1",
+      "name": "五感接地法",
+      "difficulty": "easy",
+      "description": "透過五感重新連結當下環境",
+      "steps": [
+        "找出身邊 5 樣你能看到的東西，描述一下它們的顏色和形狀",
+        "找出身邊 4 樣你能摸到的東西，感受一下它們的質地",
+        "找出身邊 3 樣你能聽到的聲音，靜靜聆聽",
+        "找出身邊 2 樣你能聞到的氣味",
+        "找出身邊 1 樣你能嚐到的味道（可以喝水或吃東西）"
+      ],
+      "duration_minutes": 5,
+      "best_for": ["panic", "dissociation", "anxiety"]
+    },
+    {
+      "id": "box_breathing",
+      "name": "方形呼吸法",
+      "difficulty": "easy",
+      "description": "透過規律呼吸穩定神經系統",
+      "steps": [
+        "舒適地坐著或躺著",
+        "吸氣，數到 4",
+        "屏息，數到 4",
+        "呼氣，數到 4",
+        "屏息，數到 4",
+        "重複 5-10 次，或直到感到平靜"
+      ],
+      "duration_minutes": 3,
+      "best_for": ["anxiety", "panic", "hyperarousal"]
+    },
+    {
+      "id": "body_scan",
+      "name": "身體掃描冥想",
+      "difficulty": "medium",
+      "description": "從頭到腳逐漸放鬆身體",
+      "steps": [
+        "閉上眼睛，舒服地躺著",
+        "注意你的頭部和面部，讓肌肉放鬆",
+        "慢慢移動到頸部、肩膀",
+        "繼續掃描胸部、腹部、背部",
+        "最後掃描雙腿和雙腳",
+        "用幾次深呼吸結束，並慢慢睜眼"
+      ],
+      "duration_minutes": 10,
+      "best_for": ["tension", "dissociation", "sleep"]
+    }
+   
+  ]
+}

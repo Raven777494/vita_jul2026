@@ -1,10 +1,25 @@
 # .gitignore
 
-# 環境變數
+# 環境變數（永不提交含真實密鑰的檔案）
 .env
 .env.local
 .env.*.local
+config/.env
 config/.env.compose
+!.env.example
+!config/.env.example
+!config/.env.compose.example
+!config/.env.compose.ci
+
+# 金鑰與憑證
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+*.crt
+secrets/
 
 # Python
 __pycache__/

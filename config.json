@@ -1,0 +1,77 @@
+{
+  "python_exe": "python",
+  "services": [
+    {
+      "name": "main_llm",
+      "model_path": "models/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf",
+      "port": 8081,
+      "gpu_layers": 40,
+      "n_threads": 8,
+      "n_ctx": 2048,
+      "timeout_sec": 600,
+      "priority": 1,
+      "priority_level": "critical",
+      "type": "llm",
+      "pipeline_role": "soul",
+      "description": "Main LLM (SoulEngine) - Mistral-Nemo-12B"
+    },
+    {
+      "name": "revise_llm",
+      "model_path": "models/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+      "port": 8082,
+      "gpu_layers": 0,
+      "n_threads": 6,
+      "n_ctx": 1024,
+      "timeout_sec": 120,
+      "priority": 2,
+      "priority_level": "important",
+      "conditional": true,
+      "type": "llm",
+      "pipeline_role": "revise",
+      "description": "Revise LLM (ReviseEngine) - Llama-3.2-3B-Instruct; REVISE_LLM_URL"
+    },
+    {
+      "name": "logic_llm",
+      "model_path": "models/Distil-NPC-gemma-3-1b-it-Q4_K_M-imat.gguf",
+      "port": 8083,
+      "gpu_layers": 0,
+      "n_threads": 4,
+      "n_ctx": 2048,
+      "timeout_sec": 120,
+      "priority": 3,
+      "priority_level": "important",
+      "conditional": true,
+      "type": "llm",
+      "pipeline_role": "logic",
+      "description": "Logic LLM (LogicEngine) - Distil-NPC-gemma-3-1b"
+    },
+    {
+      "name": "memory_llm",
+      "model_path": "BAAI/bge-m3",
+      "port": 8084,
+      "gpu_layers": 0,
+      "n_threads": 4,
+      "n_ctx": 1024,
+      "timeout_sec": 60,
+      "priority": 5,
+      "priority_level": "important",
+      "type": "embedding",
+      "pipeline_role": "memory",
+      "description": "Memory LLM (VectorService) - BAAI/bge-m3"
+    },
+    {
+      "name": "emobloom_llm",
+      "model_path": "models/Emobloom-7b.i1-Q5_K_M.gguf",
+      "port": 8085,
+      "gpu_layers": 0,
+      "n_threads": 6,
+      "n_ctx": 1024,
+      "timeout_sec": 120,
+      "priority": 4,
+      "priority_level": "important",
+      "type": "emotion_proxy",
+      "pipeline_role": "emotion",
+      "description": "Emobloom LLM (EmotionService) - Emobloom-7b"
+    }
+  ]
+}

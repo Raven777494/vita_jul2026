@@ -1,0 +1,17 @@
+sources:
+  docker_logs:
+    type: docker_logs
+    include_containers:
+      - vita-postgres
+      - vita-redis
+      - vita-n8n
+
+sinks:
+  victorialogs:
+    type: http
+    inputs: ["docker_logs"]
+    uri: "http://vita-victorialogs:9428/insert/jsonline?_stream_fields=container_name"
+    encoding:
+      codec: json
+    batch:
+      as_array: false  # 這行是關鍵：不使用數組，達成 NDJSON 效果

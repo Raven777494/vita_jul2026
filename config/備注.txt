@@ -1,0 +1,10 @@
+統一設定LLM讀取器(app/config_loader.py)
+單一組態LLM來源(config/llm_services.yml)
+
+config/llm_services.yml  [單一配置源]
+         ↓
+    LLMServiceLoader
+         ↓
+    ┌────┴────┬────────┬──────────┐
+    ↓         ↓        ↓          ↓
+config.py  seele_v8_5.py  docker-compose  監控面板

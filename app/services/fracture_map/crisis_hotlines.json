@@ -1,0 +1,4 @@
+{
+  "_deprecated_notice": "Internal reference only. Do not inject into user-facing responses. Use app/clinical/companion_language_policy.py.",
+  "hotlines": []
+}

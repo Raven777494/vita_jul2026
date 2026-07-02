@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>希兒 Xier - AI 心理伴侶</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 600px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+        }
+        
+        .message.user {
+            justify-content: flex-end;
+        }
+        
+        .message.ai {
+            justify-content: flex-start;
+        }
+        
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+        
+        .message.user .message-bubble {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.ai .message-bubble {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .input-section {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+        
+        #input-text {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #eee;
+            border-radius: 25px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        #input-text:focus {
+            border-color: #667eea;
+        }
+        
+        #send-btn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        
+        #send-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        #send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+        
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+        
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes bounce {
+            0%, 80%, 100% {
+                opacity: 0.3;
+                transform: translateY(0);
+            }
+            30% {
+                opacity: 1;
+                transform: translateY(-10px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>希兒 Xier</h1>
+            <p>你嘅知心朋友，隨時陪你傾計</p>
+        </div>
+        
+        <div class="chat-history" id="chat-history"></div>
+        
+        <div class="input-section">
+            <input 
+                type="text" 
+                id="input-text" 
+                placeholder="同我傾計，係唔係..." 
+                autocomplete="off"
+            />
+            <button id="send-btn" type="button">發送</button>
+        </div>
+    </div>
+    
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const inputText = document.getElementById('input-text');
+        const sendBtn = document.getElementById('send-btn');
+        
+        const API_BASE = window.location.origin || 'http://127.0.0.1:8000';
+        const CHAT_URL = `${API_BASE}/chat`;
+        const GREETING_URL = `${API_BASE}/chat/greeting`;
+        const USER_ID = 'user_' + Math.random().toString(36).substr(2, 9);
+        const SESSION_ID = USER_ID;
+        
+        const FALLBACK_GREETING =
+            'Hi！我叫希兒，好高興認識你。我係你嘅心理伴侶同好朋友，有咩想傾都可以同我講，我會用心聽你講。';
+        
+        function addMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            
+            if (role === 'ai') {
+                content = content
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n/g, '<br>');
+            }
+            
+            bubbleDiv.innerHTML = content;
+            messageDiv.appendChild(bubbleDiv);
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+        
+        function addTypingIndicator() {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai';
+            messageDiv.id = 'typing-indicator';
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+            
+            messageDiv.appendChild(bubbleDiv);
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+        
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+        
+        async function loadOpeningGreeting() {
+            try {
+                const response = await fetch(GREETING_URL, { method: 'GET' });
+                if (!response.ok) {
+                    addMessage('ai', FALLBACK_GREETING);
+                    return;
+                }
+                const data = await response.json();
+                addMessage('ai', data.text || FALLBACK_GREETING);
+            } catch (error) {
+                console.error('Greeting load failed:', error);
+                addMessage('ai', FALLBACK_GREETING);
+            }
+        }
+        
+        async function sendMessage() {
+            const text = inputText.value.trim();
+            if (!text) return;
+            
+            addMessage('user', text);
+            inputText.value = '';
+            sendBtn.disabled = true;
+            addTypingIndicator();
+            
+            try {
+                const response = await fetch(CHAT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        session_id: SESSION_ID,
+                        text: text
+                    })
+                });
+                
+                if (!response.ok) {
+                    removeTypingIndicator();
+                    addMessage('ai', '哎呀，出咗啲問題。可以再試一次嗎？');
+                    return;
+                }
+                
+                const data = await response.json();
+                removeTypingIndicator();
+                addMessage('ai', data.text || '...');
+                
+            } catch (error) {
+                console.error('Error:', error);
+                removeTypingIndicator();
+                addMessage('ai', '連接失敗，請檢查伺服器是否運行中。');
+            } finally {
+                sendBtn.disabled = false;
+                inputText.focus();
+            }
+        }
+        
+        sendBtn.addEventListener('click', sendMessage);
+        inputText.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        inputText.focus();
+        loadOpeningGreeting();
+    </script>
+</body>
+</html>

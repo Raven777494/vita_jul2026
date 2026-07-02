@@ -51,6 +51,9 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Scan for accidental secrets in tracked files
+        run: python scripts/security/scan_secrets.py
+
       - name: Run clinical language policy tests
         run: python -m pytest tests/clinical/ -q --tb=short
 
