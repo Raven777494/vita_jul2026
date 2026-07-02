@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: VictoriaMetrics
+    uid: vita-vmsingle
+    type: prometheus
+    access: proxy
+    url: http://vmsingle:8428
+    isDefault: true
+    editable: false

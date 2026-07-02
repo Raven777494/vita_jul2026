@@ -1,0 +1,673 @@
+version: '3.9'
+
+# 【Engine7B Platform Engine】PostgreSQL / Redis / 可觀測性基礎設施
+# 不負責：LLM 推理（Compute Engine）、對話邏輯（Logic Engine）
+
+# Credential anchors — values from config/.env.compose (never commit secrets here).
+# Usage: docker compose --env-file config/.env.compose up -d
+x-postgres-credentials: &postgres-credentials
+  POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required — pass --env-file config/.env.compose}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+
+x-vita-db-env: &vita-db-env
+  DB_USER: ${DB_USER:-${POSTGRES_USER}}
+  DB_PASSWORD: ${DB_PASSWORD:-${POSTGRES_PASSWORD}}
+  DB_HOST: ${DB_HOST:-postgres}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_NAME: ${DB_NAME:-${POSTGRES_DB}}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+
+services:
+  # ============================================
+  # 【Infrastructure - PostgreSQL】
+  # ============================================
+  
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    image: vita-postgres:pg16-vector-age-cron
+    container_name: vita-postgres
+    hostname: postgres
+    environment:
+      <<: *postgres-credentials
+      POSTGRES_INITDB_ARGS: "-c shared_buffers=256MB -c max_connections=200"
+      PGTZ: UTC
+    command:
+      - "-c"
+      - "shared_preload_libraries=age,pg_cron"
+      - "-c"
+      - "cron.database_name=vita_db"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vita_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【Infrastructure - Redis】
+  # ============================================
+  
+  redis:
+    image: redis:7-alpine
+    container_name: vita-redis
+    hostname: redis
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --timeout 0
+      --tcp-backlog 511
+      --databases 16
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2.5G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【Observability - VictoriaLogs】
+  # ============================================
+  
+  victorialogs:
+    image: victoriametrics/victoria-logs:v1.43.1
+    container_name: vita-victorialogs
+    hostname: victorialogs
+    command:
+      - "-storageDataPath=/victoria-logs-data"
+      - "-httpListenAddr=0.0.0.0:9428"
+      - "-loggerFormat=json"
+    volumes:
+      - victorialogs_data:/victoria-logs-data
+    ports:
+      - "9428:9428"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/127.0.0.1/9428"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【Observability - VictoriaMetrics】
+  # ============================================
+  
+  vmsingle:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: vita-vmsingle
+    hostname: vmsingle
+    command:
+      - "-storageDataPath=/victoria-metrics-data"
+      - "-httpListenAddr=0.0.0.0:8428"
+      - "-retentionPeriod=30d"
+      - "-loggerFormat=json"
+    volumes:
+      - vmsingle_data:/victoria-metrics-data
+    ports:
+      - "8428:8428"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/127.0.0.1/8428"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【Visualization - Grafana】
+  # ============================================
+  
+  grafana:
+    image: grafana/grafana:latest
+    container_name: vita-grafana
+    hostname: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SERVER_ROOT_URL: http://grafana:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【Automation - N8N (SQLite隔離)】
+  # ============================================
+  
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: vita-n8n
+    hostname: n8n
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: 'true'
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:?N8N_BASIC_AUTH_PASSWORD is required}
+      N8N_HOST: n8n
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://n8n:5678/
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      TZ: Asia/Taipei
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const http = require('http'); const req = http.request('http://localhost:5678/healthz', { timeout: 2000 }, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【LLM Services - Optional Docker Inference】
+  # Default dev: run LLMs on host via seele_v8_5.py (8081-8085).
+  # GPU profile: config/hardware_profile.json (Nemo GPU ~40 layers; others CPU).
+  # Reserve 20% VRAM (~3.2GB on 16GB card) for TTS + VTube Studio.
+  # Start these only for full-docker deploy: docker compose --profile llm-docker up -d
+  # ============================================
+  
+  vita-main-llm:
+    profiles: ["llm-docker"]
+    image: vita-main-llm:latest
+    container_name: vita-main-llm
+    hostname: main-llm
+    environment:
+      MODEL_PATH: models/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf
+      MODEL_NAME: Mistral-Nemo-12B
+      PORT: 8081
+      GPU_LAYERS: 40
+      N_THREADS: 8
+      N_CTX: 2048
+      TIMEOUT_SECONDS: 120
+      LOG_LEVEL: INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    ports:
+      - "8081:8081"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 12G
+        reservations:
+          cpus: '2.0'
+          memory: 8G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【LLM Services - Revise LLM / REVISE_LLM_URL (Llama-3.2-3B)】
+  # ============================================
+  
+  vita-revise-llm:
+    profiles: ["llm-docker"]
+    image: vita-revise-llm:latest
+    container_name: vita-revise-llm
+    hostname: revise-llm
+    environment:
+      MODEL_PATH: models/Llama-3.2-3B-Instruct-Q4_K_M.gguf
+      MODEL_NAME: Llama-3.2-3B
+      PORT: 8082
+      GPU_LAYERS: 0
+      N_THREADS: 6
+      N_CTX: 1024
+      TIMEOUT_SECONDS: 30
+      LOG_LEVEL: INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    ports:
+      - "8082:8082"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 6G
+        reservations:
+          cpus: '1.0'
+          memory: 3G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【LLM Services - Logic LLM (Distil-NPC-gemma-3-1b)】
+  # ============================================
+  
+  vita-logic-llm:
+    profiles: ["llm-docker"]
+    image: vita-logic-llm:latest
+    container_name: vita-logic-llm
+    hostname: logic-llm
+    environment:
+      MODEL_PATH: models/Distil-NPC-gemma-3-1b-it-Q4_K_M-imat.gguf
+      MODEL_NAME: Distil-NPC-gemma-3-1b
+      PORT: 8083
+      GPU_LAYERS: 0
+      N_THREADS: 4
+      N_CTX: 2048
+      TIMEOUT_SECONDS: 30
+      LOG_LEVEL: INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    ports:
+      - "8083:8083"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 6G
+        reservations:
+          cpus: '1.0'
+          memory: 3G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【LLM Services - Memory LLM (BGE-M3)】
+  # ============================================
+  
+  vita-memory-llm:
+    profiles: ["llm-docker"]
+    image: vita-memory-llm:latest
+    container_name: vita-memory-llm
+    hostname: memory-llm
+    environment:
+      MODEL_PATH: BAAI/bge-m3
+      MODEL_NAME: bge-m3
+      PORT: 8084
+      GPU_LAYERS: 0
+      N_THREADS: 4
+      N_CTX: 1024
+      TIMEOUT_SECONDS: 20
+      LOG_LEVEL: INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    ports:
+      - "8084:8084"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【LLM Services - Emobloom LLM (Emobloom-7b)】
+  # ============================================
+  
+  vita-emobloom-llm:
+    profiles: ["llm-docker"]
+    image: vita-emobloom-llm:latest
+    container_name: vita-emobloom-llm
+    hostname: emobloom-llm
+    environment:
+      MODEL_PATH: models/Emobloom-7b.i1-Q5_K_M.gguf
+      MODEL_NAME: Emobloom-7b
+      PORT: 8085
+      GPU_LAYERS: 0
+      N_THREADS: 6
+      N_CTX: 1024
+      TIMEOUT_SECONDS: 10
+      LOG_LEVEL: INFO
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    ports:
+      - "8085:8085"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 6G
+        reservations:
+          cpus: '1.0'
+          memory: 3G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 【Main API - Vita API】
+  # ============================================
+  
+  vita-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: vita-api:latest
+    container_name: vita-api
+    hostname: vita-api
+    environment:
+      # Core Settings
+      ENV: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      RUNNING_IN_DOCKER: "true"
+      
+      # Server Settings
+      HOST: 0.0.0.0
+      PORT: 8080
+      WORKERS: 4
+      WORKER_CLASS: uvicorn.workers.UvicornWorker
+      
+      # Database Configuration
+      <<: *vita-db-env
+      
+      # Database Connection Pool
+      DB_POOL_SIZE: 20
+      DB_MAX_OVERFLOW: 40
+      DB_POOL_RECYCLE: 3600
+      DB_POOL_PRE_PING: "true"
+      
+      # Redis Configuration
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_URL: redis://redis:6379/0
+      REDIS_PASSWORD: ""
+      
+      # Redis Connection Pool
+      REDIS_SOCKET_CONNECT_TIMEOUT: 10
+      REDIS_SOCKET_TIMEOUT: 5
+      REDIS_SOCKET_KEEPALIVE: "true"
+      
+      # LLM Services - host Seele on Windows/Mac/Linux (seele_v8_5.py :8081-8085)
+      MAIN_LLM_URL: http://host.docker.internal:8081
+      REVISE_LLM_URL: http://host.docker.internal:8082
+      LOGIC_LLM_URL: http://host.docker.internal:8083
+      MEMORY_LLM_URL: http://host.docker.internal:8084
+      EMOBLOOM_LLM_URL: http://host.docker.internal:8085
+      
+      # LLM Model Names
+      MAIN_LLM_MODEL: Mistral-Nemo-12B
+      REVISE_LLM_MODEL: Llama-3.2-3B
+      LOGIC_LLM_MODEL: Distil-NPC-gemma-3-1b
+      MEMORY_LLM_MODEL: bge-m3
+      EMOBLOOM_LLM_MODEL: Emobloom-7b
+      
+      # LLM Timeouts (Unified)
+      MAIN_LLM_TIMEOUT: 120
+      REVISE_LLM_TIMEOUT: 30
+      LOGIC_LLM_TIMEOUT: 30
+      MEMORY_LLM_TIMEOUT: 20
+      EMOBLOOM_LLM_TIMEOUT: 10
+      
+      # LLM Retry Policy
+      LLM_MAX_RETRIES: 3
+      LLM_RETRY_DELAY_SECONDS: 1
+      
+      # Security (from config/.env.compose — never commit literals here)
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      ENCRYPT_KEY: ${ENCRYPT_KEY:?ENCRYPT_KEY is required}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      API_KEY: ${API_KEY:?API_KEY is required}
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,https://vita.example.com"
+      
+      # Monitoring & Observability
+      VICTORIA_METRICS_URL: http://vmsingle:8428
+      VICTORIA_LOGS_URL: http://victorialogs:9428
+      ENABLE_METRICS: "true"
+      ENABLE_TRACING: "true"
+      ENABLE_VICTORIA_LOGS_SHIPPER: "true"
+      VICTORIA_LOGS_SERVICE: vita-api
+      
+      # Session & Cache
+      SESSION_TIMEOUT: 3600
+      CACHE_TTL: 604800
+      
+      # API Rate Limiting
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_REQUESTS: 100
+      RATE_LIMIT_PERIOD: 60
+      
+      # Worker Configuration
+      QUEUE_PROCESSOR_ENABLED: "true"
+      QUEUE_MAX_BATCH_SIZE: 20
+      QUEUE_PROCESS_INTERVAL_MS: 50
+      
+    volumes:
+      - ./app:/app/app
+      - ./models:/app/models
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+      - ./data:/app/data
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - vita-network
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  vita-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  victorialogs_data:
+    driver: local
+  vmsingle_data:
+    driver: local
+  grafana_data:
+    driver: local
+  n8n_data:
+    driver: local

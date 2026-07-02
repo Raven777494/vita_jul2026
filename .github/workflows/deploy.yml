@@ -1,0 +1,81 @@
+# GitHub Actions deploy workflow skeleton for VITA (engine7b)
+#
+# Security rules (mandatory):
+#   1. Only Verified Creator actions from the `actions` organization.
+#   2. Pin major version tags (never @main / @master).
+#   3. No secrets in workflow YAML — inject via GitHub Encrypted Secrets at runtime.
+#   4. Materialize config/.env.compose on the runner; never commit generated files.
+#
+# Verified actions used:
+#   - actions/checkout@v4
+#
+# Before first deploy: configure repository/environment secrets listed in docs/operations/deploy.md
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (GitHub Environment for approval gates)
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      dry_run:
+        description: Validate compose config only (no host deploy)
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Materialize compose env from GitHub Secrets
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          N8N_BASIC_AUTH_USER: ${{ secrets.N8N_BASIC_AUTH_USER }}
+          N8N_BASIC_AUTH_PASSWORD: ${{ secrets.N8N_BASIC_AUTH_PASSWORD }}
+          N8N_ENCRYPTION_KEY: ${{ secrets.N8N_ENCRYPTION_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ENCRYPT_KEY: ${{ secrets.ENCRYPT_KEY }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          python scripts/deploy/write_compose_env.py --from-env --require-all
+
+      - name: Validate docker compose configuration
+        run: docker compose --env-file config/.env.compose config --quiet
+
+      - name: Deploy to target host (placeholder)
+        if: inputs.dry_run == false
+        run: |
+          echo "Deploy step not implemented in skeleton."
+          echo "Target environment: ${{ inputs.environment }}"
+          echo "Implement: SSH or self-hosted runner, docker compose pull/up, health smoke."
+          echo "Rollback: redeploy previous image digest or restore prior config/.env.compose snapshot."
+
+      - name: Remove generated compose env from runner
+        if: always()
+        run: rm -f config/.env.compose

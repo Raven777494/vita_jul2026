@@ -1,0 +1,11 @@
+# VictoriaLogs alert: missed crisis interception events (P2-C)
+#
+# Import into Grafana (VictoriaLogs datasource) or run in VictoriaLogs VMUI.
+# Fires when any missed interception is logged in the evaluation window.
+#
+# Required log fields (from app/metrics/crisis_metrics.py via VictoriaLogs shipper):
+#   service, log_type, event_type, outcome
+
+service:"vita-api" log_type:"crisis" event_type:"crisis_interception" outcome:"missed"
+| stats count() as missed
+| filter missed:>0
