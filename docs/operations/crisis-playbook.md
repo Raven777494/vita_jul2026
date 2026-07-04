@@ -18,7 +18,7 @@ Audience: Operators, clinical supervisors, on-call engineers
 | 1-2 | Standard logging | Normal companion tone |
 | 3 | Elevated logging, KAG safety fact | Increased hold and grounding |
 | 4 | Escalation flag, critical logger | Companion high-risk reply |
-| 5 | Critical logger, notification hook | Companion critical reply |
+| 5 | Critical logger, escalation notifier (webhook optional) | Companion critical reply |
 
 ## Log destinations
 
@@ -51,7 +51,7 @@ Audience: Operators, clinical supervisors, on-call engineers
 
 ## Human review hook (placeholder)
 
-`emotional_safety_hub._send_escalation_notifications` currently logs warnings. Production should integrate Slack/email via **GitHub Encrypted Secrets** or Docker secrets — never hard-coded credentials.
+`emotional_safety_hub._send_escalation_notifications` delegates to `app/services/escalation_notifier.py`. Configure `ESCALATION_WEBHOOK_URL` via GitHub Encrypted Secrets or host env — never hard-code credentials or webhook URLs in the repository.
 
 ## Database audit fields
 

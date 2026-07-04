@@ -36,7 +36,7 @@ Version: 0.2 (P2-B)
 | JWT_SECRET | On compromise or 90 days | Rotate in env; invalidate outstanding tokens |
 | API_KEY | On compromise | Regenerate; update client integrations |
 
-Document rotation in incident report ([../operations/incident.md](../operations/incident.md)).
+Document rotation in [incident.md](../operations/incident.md) and [key-rotation-runbook.md](key-rotation-runbook.md).
 
 ## Logging
 
