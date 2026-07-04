@@ -128,7 +128,7 @@ services:
       - vita-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/127.0.0.1/9428"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:9428/health | grep -q OK"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -170,7 +170,7 @@ services:
       - vita-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/127.0.0.1/8428"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8428/health | grep -q OK"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -526,8 +526,8 @@ services:
     container_name: vita-api
     hostname: vita-api
     environment:
-      # Core Settings
-      ENV: production
+      # Core Settings (local compose stack — production/staging set via deploy overlays)
+      ENV: development
       DEBUG: "false"
       LOG_LEVEL: INFO
       RUNNING_IN_DOCKER: "true"
@@ -615,6 +615,9 @@ services:
       
     volumes:
       - ./app:/app/app
+      - ./compose_env.py:/app/compose_env.py:ro
+      - ./hardware_profile_loader.py:/app/hardware_profile_loader.py:ro
+      - ./vita_core_config.py:/app/vita_core_config.py:ro
       - ./models:/app/models
       - ./cache:/app/cache
       - ./logs:/app/logs
