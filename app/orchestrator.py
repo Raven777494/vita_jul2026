@@ -2092,6 +2092,31 @@ class Orchestrator:
                 "metadata": {}
             }
 
+    def _record_chat_processing_latency(
+        self,
+        process_duration_seconds: float,
+        risk_level: int,
+    ) -> None:
+        """Observe vita_chat_processing_seconds for the runtime /chat path (SLO-2/3).
+
+        Metric recording must never break the chat turn, so failures are logged
+        at debug level and swallowed.
+        """
+        try:
+            from app.metrics.chat_latency_metrics import (
+                record_chat_processing_from_risk_level,
+            )
+
+            record_chat_processing_from_risk_level(
+                risk_level=int(risk_level or 0),
+                duration_seconds=float(process_duration_seconds),
+            )
+        except Exception as metric_error:
+            self.logger.debug({
+                "event": "chat_latency_metric_record_failed",
+                "error": str(metric_error),
+            })
+
     async def process_user_message_async(
         self,
         session_id: str,
@@ -2633,6 +2658,7 @@ class Orchestrator:
             # ========== 8. 性能度量 ==========
             process_duration = (datetime.now() - process_start).total_seconds()
             result['metadata']['processing_time_sec'] = round(process_duration, 3)
+            self._record_chat_processing_latency(process_duration, result['risk_level'])
             
             self.perf_logger.info({
                 "event": "turn_completed",
@@ -2782,6 +2808,10 @@ class Orchestrator:
             result['phase'] = ConversationPhase.ERROR.value
             result['warnings'].append(str(e))
             result['metadata']['processing_time_sec'] = round(process_duration, 3)
+            self._record_chat_processing_latency(
+                process_duration,
+                int(result.get('risk_level', 0) or 0),
+            )
             
             return result
 
