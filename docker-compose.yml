@@ -160,8 +160,10 @@ services:
       - "-httpListenAddr=0.0.0.0:8428"
       - "-retentionPeriod=30d"
       - "-loggerFormat=json"
+      - "-promscrape.config=/etc/victoriametrics/scrape.yml"
     volumes:
       - vmsingle_data:/victoria-metrics-data
+      - ./config/observability/victoriametrics-scrape.yml:/etc/victoriametrics/scrape.yml:ro
     ports:
       - "8428:8428"
     networks:
