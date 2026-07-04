@@ -1,6 +1,6 @@
 # Monitoring and Alerting
 
-Version: 0.3 (P4-3)
+Version: 0.4 (P4-3)
 
 ## Components
 
@@ -16,11 +16,14 @@ Version: 0.3 (P4-3)
 
 ## Chat latency histogram (P4-3)
 
-Instrumented in `app/metrics/chat_latency_metrics.py`, called from `EmotionalSafetyHub._record_hub_processing_latency`.
+Instrumented in `app/metrics/chat_latency_metrics.py`. Recorded from both runtime chat paths:
+
+- Orchestrator (default `/chat` path): `Orchestrator._record_chat_processing_latency` on every turn exit (success and exception), path derived from `risk_level` via `resolve_processing_path_from_risk_level`.
+- Safety hub path: `EmotionalSafetyHub._record_hub_processing_latency` on every hub exit.
 
 | Metric | Type | Labels | Meaning |
 |--------|------|--------|---------|
-| `vita_chat_processing_seconds` | Histogram | `path=normal\|crisis` | Hub `process_user_input` wall time |
+| `vita_chat_processing_seconds` | Histogram | `path=normal\|crisis` | Chat turn wall time (orchestrator + hub) |
 
 Grafana: **VITA SLO Overview** (`grafana/provisioning/dashboards/json/vita_slo_overview.json`).
 
@@ -31,6 +34,21 @@ histogram_quantile(0.95, sum by (le, path) (rate(vita_chat_processing_seconds_bu
 ```
 
 Scrape job: `config/observability/victoriametrics-scrape.yml` (target `vita-api:8080/metrics`).
+
+### Multiprocess aggregation (required for multi-worker deployments)
+
+`vita-api` runs 4 uvicorn workers (`WORKERS=4`). Each worker has an isolated
+Prometheus registry, so `GET /metrics` must aggregate across workers or scraped
+values are fragmented (one worker only). This is enabled via:
+
+- `PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc` (env, set in `docker-compose.yml`).
+- A `tmpfs` mount at that path, cleared on every container (re)start.
+- `GET /metrics` builds a `CollectorRegistry` + `MultiProcessCollector` when the env var is set (`app/main.py`).
+- `multiprocess.mark_process_dead(pid)` on worker shutdown (`app/main.py` lifecycle).
+
+Host single-process dev runs (`uvicorn --reload`) leave the env var unset and
+use the default in-process registry. Per-process metrics (`python_gc_*`,
+`process_*`) are not exported in multiprocess mode by design.
 
 ## Crisis interception metrics (P2-C)
 

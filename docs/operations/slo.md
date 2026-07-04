@@ -1,6 +1,6 @@
 # Service Level Objectives (SLO)
 
-Version: 0.2 (P4-3)
+Version: 0.3 (P4-3)
 
 ## Scope
 
@@ -21,8 +21,10 @@ VITA Logic Engine (`vita-api`) and crisis safety path (`EmotionalSafetyHub`).
 | Component | Location |
 |-----------|----------|
 | Histogram | `app/metrics/chat_latency_metrics.py` — `vita_chat_processing_seconds{path="normal\|crisis"}` |
-| Hub wiring | `EmotionalSafetyHub._record_hub_processing_latency()` on every turn exit |
+| Orchestrator wiring | `Orchestrator._record_chat_processing_latency()` on every `/chat` turn exit (runtime path) |
+| Hub wiring | `EmotionalSafetyHub._record_hub_processing_latency()` on every hub exit |
 | Path label | `crisis` when `is_crisis_signal()` true (same definition as interception metrics) |
+| Multiprocess | `PROMETHEUS_MULTIPROC_DIR` + tmpfs aggregate 4 uvicorn workers (see monitoring.md) |
 | Scrape | `config/observability/victoriametrics-scrape.yml` → vmsingle `-promscrape.config` |
 | Dashboard | `grafana/provisioning/dashboards/json/vita_slo_overview.json` |
 
