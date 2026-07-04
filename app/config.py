@@ -18,7 +18,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
-from compose_env import compose_or_env
+from compose_env import compose_file_credential, compose_or_env
 
 # ==================== 日誌系統 ====================
 
@@ -73,6 +73,24 @@ IS_DEVELOPMENT = CURRENT_ENV == "development"
 
 # Docker 環境偵測
 IS_RUNNING_IN_DOCKER = os.path.exists('/.dockerenv') or os.getenv('RUNNING_IN_DOCKER', '').lower() == 'true'
+
+
+def _resolve_db_credential(key: str, default: str = "") -> str:
+    """Resolve a DB auth credential (DB_USER / DB_PASSWORD).
+
+    Local/testing host development treats config/.env.compose as authoritative
+    because that file initializes the local Docker Postgres. This prevents a
+    stale inherited OS/Machine environment value (e.g. a leftover DB_PASSWORD)
+    from silently causing "password authentication failed". Production, staging,
+    and in-container runtimes keep OS-environment precedence so injected secrets
+    win.
+    """
+    local_dev = not (IS_PRODUCTION or IS_STAGING or IS_RUNNING_IN_DOCKER)
+    if local_dev:
+        file_value = compose_file_credential(key)
+        if file_value:
+            return file_value
+    return compose_or_env(key, default)
 
 # ==================== .env 載入 ====================
 
@@ -372,8 +390,8 @@ class Config:
     AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
     
     # ---------- 數據庫配置（密碼唯一來源：docker-compose.yml） ----------
-    DB_USER = compose_or_env("DB_USER", "postgres")
-    DB_PASSWORD = compose_or_env("DB_PASSWORD", "")
+    DB_USER = _resolve_db_credential("DB_USER", "postgres")
+    DB_PASSWORD = _resolve_db_credential("DB_PASSWORD", "")
     DB_HOST = os.getenv("DB_HOST") or ("postgres" if IS_DOCKER else "127.0.0.1")
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_NAME = os.getenv("DB_NAME") or compose_or_env("DB_NAME", "vita_test" if IS_TESTING else "vita_db")
