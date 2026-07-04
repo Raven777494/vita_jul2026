@@ -12,7 +12,7 @@ Review: monthly or each release candidate
 | TD-005 | Notification hook stub | Medium | P2 | Closed P4-2 | `app/services/escalation_notifier.py`; `ESCALATION_WEBHOOK_URL` from env |
 | TD-006 | docker-compose dev secrets in YAML | Medium | P1 | Closed P2-B | Secrets moved to `config/.env.compose`; compose uses `${VAR}` only; deploy.yml skeleton |
 | TD-007 | Dependency CVE tracking (pip-audit CI gate) | Medium | P1 | Closed P1 | Green gate via fastapi 0.135.0 / starlette 1.3.1 / python-jose 3.5.0 |
-| TD-008 | Monitoring dashboards not codified | Low | P2 | Partial P2-C | Crisis interception metrics + Grafana/LogsQL alerts in repo |
+| TD-008 | Monitoring dashboards not codified | Low | P2 | Partial P4-3 | SLO dashboard + VM scrape config; Grafana provisioning in repo |
 | TD-009 | Deploy CD host registry optional | Low | P3 | Partial P3-5 | GHA build+smoke; SSH image stream; registry push optional follow-up |
 
 ## Clinical debt (linked)

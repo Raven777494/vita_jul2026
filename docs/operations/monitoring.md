@@ -1,6 +1,6 @@
 # Monitoring and Alerting
 
-Version: 0.2 (P2-C)
+Version: 0.3 (P4-3)
 
 ## Components
 
@@ -10,9 +10,27 @@ Version: 0.2 (P2-C)
 | PostgreSQL | via platform probe | pg_extension:* |
 | Redis | via platform probe | redis |
 | VictoriaLogs | `GET /health` on :9428 | platform_engine victorialogs |
-| VictoriaMetrics | `:8428` (scrape `/metrics` from vita-api) | optional metrics scrape |
+| VictoriaMetrics | `:8428` (scrapes vita-api `/metrics` via `config/observability/victoriametrics-scrape.yml`) | optional metrics scrape |
 | Grafana | `:3001` | provisioning in `grafana/provisioning/` |
 | Seele LLMs | `:8081-8085` /health | compute_engine |
+
+## Chat latency histogram (P4-3)
+
+Instrumented in `app/metrics/chat_latency_metrics.py`, called from `EmotionalSafetyHub._record_hub_processing_latency`.
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `vita_chat_processing_seconds` | Histogram | `path=normal\|crisis` | Hub `process_user_input` wall time |
+
+Grafana: **VITA SLO Overview** (`grafana/provisioning/dashboards/json/vita_slo_overview.json`).
+
+PromQL p95 by path:
+
+```
+histogram_quantile(0.95, sum by (le, path) (rate(vita_chat_processing_seconds_bucket[5m])))
+```
+
+Scrape job: `config/observability/victoriametrics-scrape.yml` (target `vita-api:8080/metrics`).
 
 ## Crisis interception metrics (P2-C)
 
@@ -99,5 +117,5 @@ Structured crisis metric fields are merged via `record.vita_fields` on the Victo
 ## Tests
 
 ```powershell
-python -m pytest tests/metrics/test_crisis_metrics.py -q
+python -m pytest tests/metrics/test_crisis_metrics.py tests/metrics/test_chat_latency_metrics.py -q
 ```
