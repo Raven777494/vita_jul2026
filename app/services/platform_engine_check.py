@@ -49,6 +49,48 @@ def _wrong_postgres_hint(host: str, port: str) -> str:
     )
 
 
+def _probe_database_connection(config: Any) -> str | None:
+    """Return an error message when the app DATABASE_URL cannot connect."""
+    try:
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine(
+            config.DATABASE_URL,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 5},
+        )
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        finally:
+            engine.dispose()
+        return None
+    except Exception as exc:
+        message = str(exc).lower()
+        if "password authentication failed" in message:
+            from compose_env import compose_credential_warnings
+
+            hints = compose_credential_warnings()
+            detail = (
+                f"Password authentication failed for user '{config.DB_USER}' at "
+                f"{config.DB_HOST}:{config.DB_PORT}. "
+                "App DB_PASSWORD is resolved by compose_or_env (OS environment wins "
+                "over config/.env.compose)."
+            )
+            if hints:
+                return f"{detail} {hints[0]}"
+            return (
+                f"{detail} Ensure POSTGRES_PASSWORD in config/.env.compose matches "
+                "the password Postgres was initialized with."
+            )
+        if "connection refused" in message or "could not connect to server" in message:
+            return (
+                f"Cannot connect to {config.DB_HOST}:{config.DB_PORT}. "
+                "Start Postgres: docker compose --env-file config/.env.compose up -d postgres"
+            )
+        return f"Database connection failed: {exc}"
+
+
 def verify_platform_engine(
     db_manager: Any,
     *,
@@ -64,6 +106,12 @@ def verify_platform_engine(
         db_port=str(getattr(config, "DB_PORT", "")),
         db_name=str(getattr(config, "DB_NAME", "")),
     )
+
+    conn_error = _probe_database_connection(config)
+    if conn_error:
+        report.ok = False
+        report.issues.append(conn_error)
+        return report
 
     try:
         version_rows = db_manager.execute_query("SELECT version() AS version")

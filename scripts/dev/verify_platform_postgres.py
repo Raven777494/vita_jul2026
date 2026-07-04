@@ -18,9 +18,13 @@ def main() -> int:
 
     from app.config import config
     from app.services.platform_engine_check import verify_platform_engine_or_skip
+    from compose_env import compose_credential_warnings
 
     print(f"[INFO] DB target: {config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}")
     print(f"[INFO] Expected image: {config.DB_PLATFORM_POSTGRES_IMAGE}")
+
+    for warning in compose_credential_warnings():
+        print(f"[WARN] {warning}")
 
     status, report = verify_platform_engine_or_skip(require_age_graph=True)
 
