@@ -312,6 +312,9 @@ def _log_shutdown(message: str) -> None:
 def cleanup():
     """應用退出時的優雅清理"""
     try:
+        if not _logging_streams_open(vita_logger):
+            return
+
         _log_shutdown("\nInitiating graceful shutdown...")
         
         # 關閉數據庫連接（動態導入，避免 NameError）

@@ -22,6 +22,28 @@ import uuid
 logger = logging.getLogger('vita.intelligent_navigator')
 
 
+def _logging_streams_open(log: logging.Logger) -> bool:
+    """Return False when handler streams are closed (pytest teardown / atexit)."""
+    current: Optional[logging.Logger] = log
+    while current is not None:
+        for handler in getattr(current, "handlers", []):
+            stream = getattr(handler, "stream", None)
+            if stream is not None and getattr(stream, "closed", False):
+                return False
+        current = getattr(current, "parent", None)
+    return True
+
+
+def _nav_log_info(message: str) -> None:
+    if _logging_streams_open(logger):
+        logger.info(message)
+
+
+def _nav_log_warning(message: str) -> None:
+    if _logging_streams_open(logger):
+        logger.warning(message)
+
+
 @dataclass
 class FractureDetection:
     """裂痕偵測結果"""
@@ -63,7 +85,7 @@ class IntelligentNavigator:
                  fracture_manager: Optional[Any] = None,
                  config: Optional[Dict] = None):
         
-        logger.info("[NAVIGATOR] Initializing IntelligentNavigator v2.1...")
+        _nav_log_info("[NAVIGATOR] Initializing IntelligentNavigator v2.1...")
         
         # 導入 LLM 服務
         if llm_service is None:
@@ -71,7 +93,7 @@ class IntelligentNavigator:
                 from app.services.llm_service import llm_service as default_llm
                 llm_service = default_llm
             except Exception as e:
-                logger.warning(f"[NAVIGATOR] Failed to import LLM service: {e}")
+                _nav_log_warning(f"[NAVIGATOR] Failed to import LLM service: {e}")
                 llm_service = None
         
         # 導入 DB 管理器
@@ -80,7 +102,7 @@ class IntelligentNavigator:
                 from app.services.db_manager import db_manager as default_db
                 db_manager = default_db
             except Exception as e:
-                logger.warning(f"[NAVIGATOR] Failed to import DB manager: {e}")
+                _nav_log_warning(f"[NAVIGATOR] Failed to import DB manager: {e}")
                 db_manager = None
         
         self.llm = llm_service
@@ -96,7 +118,9 @@ class IntelligentNavigator:
         self.decisions_made = 0
         self.safety_mode_triggered = 0
         
-        logger.info(f"[NAVIGATOR] Initialized with {len(self.fracture_maps)} fracture maps | Version: 2.1")
+        _nav_log_info(
+            f"[NAVIGATOR] Initialized with {len(self.fracture_maps)} fracture maps | Version: 2.1"
+        )
 
     def _load_fracture_maps(self) -> Dict[str, Dict]:
         """加載裂痕地圖"""
@@ -443,12 +467,32 @@ class IntelligentNavigator:
         logger.info("[NAVIGATOR] Closing IntelligentNavigator...")
 
 
-# 全局實例
-navigator: Optional[IntelligentNavigator] = None
+# Lazy global instance (avoid import-time side effects during pytest teardown)
+_navigator_instance: Optional[IntelligentNavigator] = None
 
-try:
-    navigator = IntelligentNavigator()
-except Exception as e:
-    logger.error(f"Failed to initialize global navigator: {e}")
 
-__all__ = ['IntelligentNavigator', 'navigator', 'FractureDetection', 'NavigationDecision']
+def get_navigator() -> Optional[IntelligentNavigator]:
+    """Return shared navigator instance, creating on first use."""
+    global _navigator_instance
+    if _navigator_instance is None:
+        try:
+            _navigator_instance = IntelligentNavigator()
+        except Exception as e:
+            if _logging_streams_open(logger):
+                logger.error(f"Failed to initialize global navigator: {e}")
+    return _navigator_instance
+
+
+def __getattr__(name: str):
+    if name == "navigator":
+        return get_navigator()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [
+    'IntelligentNavigator',
+    'navigator',
+    'get_navigator',
+    'FractureDetection',
+    'NavigationDecision',
+]

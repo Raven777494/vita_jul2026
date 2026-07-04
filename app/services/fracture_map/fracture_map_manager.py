@@ -18,7 +18,6 @@ except ImportError:
 from app.services.db_manager import db_manager as main_db_manager, User
 
 logger = logging.getLogger('fracture_map')
-logger.info("[FRACTURE_MAP_MANAGER] Successfully imported and initialized")
 
 
 class RedisConnectionError(Exception):

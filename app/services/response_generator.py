@@ -12,7 +12,7 @@ from datetime import datetime
 logger = logging.getLogger('vita.response_generator')
 
 from app.services.llm_service import llm_service
-from app.services.fracture_map.intelligent_navigator import navigator, NavigationDecision
+from app.services.fracture_map.intelligent_navigator import get_navigator, NavigationDecision
 from app.services.db_service import db_service
 
 class ResponseGenerator:
@@ -20,7 +20,7 @@ class ResponseGenerator:
     
     def __init__(self):
         self.llm_service = llm_service
-        self.navigator = navigator
+        self.navigator = get_navigator()
         self.db_service = db_service
         logger.info("[RESPONSE GENERATOR] Initialized")
     
