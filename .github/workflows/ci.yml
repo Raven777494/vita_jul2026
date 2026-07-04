@@ -85,6 +85,9 @@ jobs:
       - name: Run database retention batch tests (P4-1)
         run: python -m pytest tests/db/ -q --tb=short
 
+      - name: Run security tests (P4-2)
+        run: python -m pytest tests/security/ -q --tb=short
+
       - name: Run system alignment checker
         run: python app/tests/system_alignment_checker.py
 

@@ -2051,12 +2051,26 @@ class Orchestrator:
                     "warnings": ["輸入文本為空"],
                     "metadata": {}
                 }
+
+            from app.security.prompt_sanitizer import sanitize_user_input_for_llm
+
+            sanitize_result = sanitize_user_input_for_llm(
+                str(user_text),
+                user_id=str(request.user_id),
+                session_id=str(session_id),
+                audit=True,
+            )
+            user_text = sanitize_result.sanitized_text
             
             return await self.process_user_message_async(
                 session_id=session_id,
                 user_id=request.user_id,
                 user_text=user_text,
                 language_hint=language_hint,
+                prompt_sanitize_metadata={
+                    "patterns_detected": list(sanitize_result.patterns_detected),
+                    "was_modified": sanitize_result.was_modified,
+                },
                 **kwargs
             )
             
@@ -2133,6 +2147,9 @@ class Orchestrator:
                 "language_hint": language_hint,
                 "environment": self.environment
             })
+
+            if kwargs.get("prompt_sanitize_metadata"):
+                result["metadata"]["prompt_sanitize"] = kwargs["prompt_sanitize_metadata"]
 
             # ========== 1. 獲取會話狀態 ==========
             session_state: Dict[str, Any] = {

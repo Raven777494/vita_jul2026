@@ -265,6 +265,11 @@ class BaseAsyncLLMEngine:
         **kwargs
     ) -> LLMResponse:
         """執行推理"""
+        from app.security.prompt_sanitizer import sanitize_user_input_for_llm
+
+        sanitize_result = sanitize_user_input_for_llm(prompt, audit=False)
+        prompt = sanitize_result.sanitized_text
+
         start_time = time.time()
         temp = temperature or self.config.temperature
         max_toks = max_tokens or self.config.max_tokens

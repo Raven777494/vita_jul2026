@@ -277,6 +277,30 @@ class AuditLogger:
         }
         
         critical_logger.critical(json.dumps(escalation_entry, ensure_ascii=False))
+
+    def log_prompt_injection_attempt(
+        self,
+        user_id: str,
+        session_id: str,
+        patterns_detected: list,
+        input_length: int,
+        was_modified: bool,
+    ) -> None:
+        """Log prompt injection detection metadata (no user content).
+
+        Written to audit.log only. Do not include raw user text — VictoriaLogs
+        must not receive adversarial payloads from this event.
+        """
+        audit_entry = {
+            "event_type": "prompt_injection_attempt",
+            "timestamp": datetime.now().isoformat(),
+            "user_id_hash": self._hash_pii(user_id) if user_id else "",
+            "session_id": session_id,
+            "patterns_detected": list(patterns_detected),
+            "input_length": int(input_length),
+            "was_modified": bool(was_modified),
+        }
+        audit_logger.info(json.dumps(audit_entry, ensure_ascii=False))
     
     def log_system_error(
         self,

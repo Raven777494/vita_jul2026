@@ -167,6 +167,16 @@ class EmotionalSafetyHub:
             
             session_id = session_state['session_id']
             turn_count = session_state.get('turn_count', 0) + 1
+
+            from app.security.prompt_sanitizer import sanitize_user_input_for_llm
+
+            sanitize_result = sanitize_user_input_for_llm(
+                user_input,
+                user_id=user_id,
+                session_id=session_id,
+                audit=True,
+            )
+            user_input = sanitize_result.sanitized_text
             
             app_logger.info(
                 f"[PROCESS] Turn {turn_count}: "
@@ -1033,25 +1043,15 @@ class EmotionalSafetyHub:
         risk_level: int,
         walker_score: float
     ):
-        """
-        發送升級通知給臨床團隊
-        
-        模擬實現（實際應集成 Slack/Email）
-        """
-        notification = {
-            'timestamp': datetime.now().isoformat(),
-            'user_id': user_id,
-            'session_id': session_id,
-            'risk_level': risk_level,
-            'walker_score': walker_score,
-            'action': 'ESCALATION_REQUIRED'
-        }
-        
-        app_logger.warning(f"[NOTIFICATION] {notification}")
-        
-        # 實際實現應該在這裡調用 Slack API、Email API 等
-        # await slack_service.send_escalation_alert(notification)
-        # await email_service.send_escalation_alert(notification)
+        """Send escalation notifications via pluggable backends (P4-2)."""
+        from app.services.escalation_notifier import get_escalation_notifier
+
+        await get_escalation_notifier().notify(
+            user_id=user_id,
+            session_id=session_id,
+            risk_level=risk_level,
+            walker_score=walker_score,
+        )
     
     # ============ 工具方法 ============
     

@@ -545,6 +545,10 @@ class Config:
     SESSION_MAX_RETENTION_DAYS = int(os.getenv("SESSION_MAX_RETENTION_DAYS", "90"))
     AUTO_ESCALATION_DELAY_MINUTES = int(os.getenv("AUTO_ESCALATION_DELAY_MINUTES", "1"))
     ESCALATION_CONFIRMATION_TIMEOUT = int(os.getenv("ESCALATION_CONFIRMATION_TIMEOUT", "30"))
+    ESCALATION_WEBHOOK_URL = os.getenv("ESCALATION_WEBHOOK_URL", "").strip()
+    ESCALATION_NOTIFIER_ENABLED = (
+        os.getenv("ESCALATION_NOTIFIER_ENABLED", "true").lower() == "true"
+    )
 
     from app.clinical.companion_language_policy import COMPANION_SAFE_REPLIES
 
