@@ -77,7 +77,7 @@ jobs:
         run: python -m pytest tests/platform/ -q --tb=short
 
       - name: Run crisis interception metrics tests
-        run: python -m pytest tests/metrics/test_crisis_metrics.py -q --tb=short
+        run: python -m pytest tests/metrics/test_crisis_metrics.py tests/metrics/test_chat_latency_metrics.py -q --tb=short
 
       - name: Run governance traceability tests
         run: python -m pytest tests/governance/ -q --tb=short

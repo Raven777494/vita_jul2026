@@ -9,7 +9,8 @@
 
 import json
 import logging
-from typing import Dict, Optional, List, Tuple
+import time
+from typing import Any, Dict, Optional, List, Tuple
 from datetime import datetime
 from dataclasses import dataclass, asdict
 import asyncio
@@ -127,6 +128,23 @@ class EmotionalSafetyHub:
         }
         
         app_logger.info("[HUB INIT] 情緒安全中樞已初始化")
+
+    def _record_hub_processing_latency(
+        self,
+        start_time: float,
+        risk_assessment: Any,
+    ) -> None:
+        """Observe vita_chat_processing_seconds for SLO-2 / SLO-3."""
+        from app.metrics.chat_latency_metrics import (
+            record_chat_processing_seconds,
+            resolve_processing_path,
+        )
+
+        elapsed = time.time() - start_time
+        record_chat_processing_seconds(
+            path=resolve_processing_path(risk_assessment),
+            duration_seconds=elapsed,
+        )
     
     async def process_user_input(
         self,
@@ -154,7 +172,6 @@ class EmotionalSafetyHub:
                 'escalated': bool
             }
         """
-        import time
         start_time = time.time()
         
         try:
@@ -240,6 +257,7 @@ class EmotionalSafetyHub:
                     user_id=user_id,
                     session_id=session_id,
                 )
+                self._record_hub_processing_latency(start_time, risk_assessment)
 
                 return {
                     'success': True,
@@ -355,6 +373,7 @@ class EmotionalSafetyHub:
                 user_id=user_id,
                 session_id=session_id,
             )
+            self._record_hub_processing_latency(start_time, risk_assessment)
 
             # 12. 返回結果
             return {
@@ -386,6 +405,10 @@ class EmotionalSafetyHub:
                     user_id=user_id,
                     session_id=session_state.get('session_id', 'unknown') if session_state else 'unknown',
                 )
+            self._record_hub_processing_latency(
+                start_time,
+                locals().get("risk_assessment"),
+            )
             
             audit_log.log_system_error(
                 user_id,
