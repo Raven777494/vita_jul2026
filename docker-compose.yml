@@ -596,6 +596,9 @@ services:
       VICTORIA_LOGS_URL: http://victorialogs:9428
       ENABLE_METRICS: "true"
       ENABLE_TRACING: "true"
+      # Prometheus multiprocess aggregation across the 4 uvicorn workers.
+      # Directory is a tmpfs (see below), cleared on every container (re)start.
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
       ENABLE_VICTORIA_LOGS_SHIPPER: "true"
       VICTORIA_LOGS_SERVICE: vita-api
       
@@ -624,6 +627,8 @@ services:
       - ./data:/app/data
     ports:
       - "8080:8080"
+    tmpfs:
+      - /tmp/prometheus_multiproc
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

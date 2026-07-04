@@ -571,6 +571,18 @@ class LifecycleManager:
                 except Exception as e:
                     logger.warning(f"[LIFECYCLE] Database shutdown warning: {e}")
             
+            # Prometheus multiprocess: mark this worker dead so stale gauge
+            # files are not aggregated after the worker exits.
+            multiproc_dir = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
+            if multiproc_dir:
+                try:
+                    from prometheus_client import multiprocess
+
+                    multiprocess.mark_process_dead(os.getpid())
+                    logger.info("[LIFECYCLE] Prometheus worker metrics marked dead [OK]")
+                except Exception as e:
+                    logger.warning(f"[LIFECYCLE] Prometheus multiproc cleanup warning: {e}")
+
             logger.info("=" * 80)
             logger.info("[LIFECYCLE] Application shutdown complete [OK]")
             logger.info("=" * 80)
@@ -892,7 +904,17 @@ async def prometheus_metrics():
     import app.metrics.chat_latency_metrics  # noqa: F401 — register vita_chat_processing_seconds
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    multiproc_dir = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
+    if multiproc_dir:
+        from prometheus_client import CollectorRegistry, multiprocess
+
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        payload = generate_latest(registry)
+    else:
+        payload = generate_latest()
+
+    return Response(content=payload, media_type=CONTENT_TYPE_LATEST)
 
 
 # ==================== 核心對話端點 ====================
