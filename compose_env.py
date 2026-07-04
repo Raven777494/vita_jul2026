@@ -125,6 +125,60 @@ def compose_or_env(key: str, default: str = "") -> str:
     return compose.get(key, default)
 
 
+def compose_file_credential(
+    key: str, default: str = "", project_root: Optional[Path] = None
+) -> str:
+    """Return a credential value from config/.env.compose only (ignores OS env).
+
+    Used for local-development DB auth resolution: the compose file that
+    initialized the local Docker Postgres must take precedence over any stale
+    inherited OS/Machine environment value (a common cause of
+    "password authentication failed" after `docker compose down -v`).
+    """
+    compose = load_compose_environment(project_root)
+    if key == "DB_PASSWORD":
+        return compose.get("DB_PASSWORD") or compose.get("POSTGRES_PASSWORD", default)
+    if key == "DB_USER":
+        return compose.get("DB_USER") or compose.get("POSTGRES_USER", default)
+    if key == "DB_NAME":
+        return compose.get("DB_NAME") or compose.get("POSTGRES_DB", default)
+    return compose.get(key, default)
+
+
+def compose_credential_warnings(project_root: Optional[Path] = None) -> list[str]:
+    """Return warnings when a stale OS DB credential differs from compose.
+
+    Docker Postgres is initialized from config/.env.compose (POSTGRES_PASSWORD).
+    A stale OS/Machine-level DB_PASSWORD is a common source of confusion after
+    `docker compose down -v`. In local/testing host development the compose file
+    is authoritative (see app.config), so this is informational, not fatal.
+    """
+    warnings: list[str] = []
+    compose = load_compose_environment(project_root)
+    compose_password = compose.get("DB_PASSWORD") or compose.get("POSTGRES_PASSWORD", "")
+    os_password = os.getenv("DB_PASSWORD")
+
+    if os_password and compose_password and os_password != compose_password:
+        warnings.append(
+            "A stale OS/Machine environment variable DB_PASSWORD differs from "
+            "config/.env.compose. Local development ignores it and uses "
+            "config/.env.compose (which initialized Docker Postgres). To keep the "
+            "environment clean, remove the Machine-scope variable: "
+            "[Environment]::SetEnvironmentVariable('DB_PASSWORD', $null, 'Machine') "
+            "(run PowerShell as Administrator), then restart the terminal."
+        )
+
+    os_user = os.getenv("DB_USER")
+    compose_user = compose.get("DB_USER") or compose.get("POSTGRES_USER", "")
+    if os_user and compose_user and os_user != compose_user:
+        warnings.append(
+            "OS environment variable DB_USER differs from config/.env.compose "
+            "POSTGRES_USER; local development uses the compose value."
+        )
+
+    return warnings
+
+
 def compose_env_file_for_docker(project_root: Optional[Path] = None) -> Path:
     """Return path passed to `docker compose --env-file` (must exist)."""
     root = project_root or _project_root()

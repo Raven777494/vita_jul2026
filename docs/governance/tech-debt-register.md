@@ -6,7 +6,7 @@ Review: monthly or each release candidate
 | ID | Item | Risk | Priority | Target | Notes |
 |----|------|------|----------|--------|-------|
 | TD-001 | AGE graph vs relational memory_graph dual model | Medium | P2 | Q3 | App uses SQL memory_graph; AGE vita_memory_graph provisioned but underused |
-| TD-002 | Alembic migrations not primary | Medium | P2 | In progress | Baseline stamp `20260702_0001`; see docs/database/migrations.md |
+| TD-002 | Alembic migrations not primary | Medium | P2 | Closed P4-1 | Primary policy in docs/database/migrations.md; baseline `20260702_0001` |
 | TD-003 | execute_update swallows SQL errors | Low | P2 | Q2 | Returns 0 on failure; fixed for extensions verify; audit other callers |
 | TD-004 | LLM prompt injection hardening | High | P1 | Partial P3-4 | Red-team SC-006..010 in CI; ongoing model prompt hardening |
 | TD-005 | Notification hook stub | Medium | P2 | Q3 | `_send_escalation_notifications` logs only |

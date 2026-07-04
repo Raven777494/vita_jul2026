@@ -1,6 +1,6 @@
 # Schema Overview
 
-Version: 0.1 (P1)
+Version: 0.2 (P4-1)
 
 ## Bootstrap SQL (`init-db/`)
 
@@ -36,19 +36,14 @@ Local development (`config/.env.local`):
 
 If another PostgreSQL binds port 5432 without AGE/pg_cron, the app connects but extensions fail — stop the conflicting instance or change the compose port mapping.
 
-## Migrations (P2)
+## Migrations (P4-1)
 
-See [migrations.md](migrations.md) for Alembic workflow.
+Alembic is the primary DDL path. See [migrations.md](migrations.md).
 
-## ER diagram (logical)
+## ER diagram
 
-```mermaid
-erDiagram
-  USER ||--o{ SESSION : has
-  SESSION ||--o{ TURN : contains
-  USER ||--o{ GSW_ECHO : stores
-  USER ||--o{ CRISIS_EVENT : triggers
-  USER ||--o{ REALITY_FACT : states
-```
+Full Mermaid diagrams (all ORM tables, cascade notes, AGE vs `memory_graph`): [er-diagram.md](er-diagram.md).
 
-Detailed column lists: inspect SQLAlchemy models in `db_manager.py`.
+## Retention
+
+Session-scoped purge: [retention-policy.md](retention-policy.md) and `scripts/db/retention_batch.py`.
