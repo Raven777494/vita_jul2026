@@ -1,5 +1,7 @@
 -- init-db/03-age-graph.sql
--- Apache AGE graph for future graph-RAG (distinct from relational table memory_graph).
+-- Apache AGE graph shell (read-only reserve per ADR-002).
+-- Primary app memory writes: gsw_eternal_echoes (pgvector) + memory_graph table.
+-- No runtime cypher writes until a future ADR re-opens AGE as a write path.
 
 DO $$
 BEGIN
