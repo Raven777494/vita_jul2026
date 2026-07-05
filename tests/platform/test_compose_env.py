@@ -99,6 +99,25 @@ def test_compose_credential_warnings_empty_when_os_matches(monkeypatch, tmp_path
     assert compose_credential_warnings(project_root=tmp_path) == []
 
 
+def test_compose_credential_warnings_when_os_database_url_set(monkeypatch, tmp_path: Path):
+    env_file = tmp_path / "config" / ".env.compose"
+    env_file.parent.mkdir(parents=True)
+    env_file.write_text(
+        "POSTGRES_PASSWORD=compose_secret\n"
+        "DATABASE_URL=postgresql+psycopg2://postgres:compose_secret@postgres:5432/vita_db\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("VITA_USE_COMPOSE_CI", raising=False)
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg2://postgres:wrong@127.0.0.1:5432/vita_db",
+    )
+    load_compose_environment.cache_clear()
+
+    warnings = compose_credential_warnings(project_root=tmp_path)
+    assert any("DATABASE_URL" in w for w in warnings)
+
+
 def test_compose_file_credential_ignores_os_env(monkeypatch, tmp_path: Path):
     env_file = tmp_path / "config" / ".env.compose"
     env_file.parent.mkdir(parents=True)

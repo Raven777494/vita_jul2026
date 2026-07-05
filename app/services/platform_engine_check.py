@@ -74,14 +74,25 @@ def _probe_database_connection(config: Any) -> str | None:
             detail = (
                 f"Password authentication failed for user '{config.DB_USER}' at "
                 f"{config.DB_HOST}:{config.DB_PORT}. "
-                "App DB_PASSWORD is resolved by compose_or_env (OS environment wins "
-                "over config/.env.compose)."
+                "Local development builds DATABASE_URL from config/.env.compose "
+                "(ignoring stale OS DATABASE_URL / DB_PASSWORD when they differ)."
             )
+            port_hint = ""
+            if str(config.DB_PORT) == "5432" and os.name == "nt":
+                port_hint = (
+                    " On Windows, a native PostgreSQL service often binds 5432 "
+                    "alongside Docker; use DB_PORT=5433 in config/.env.local "
+                    "(POSTGRES_HOST_PORT=5433 in config/.env.compose) so host "
+                    "tools reach vita-postgres, not the wrong server."
+                )
             if hints:
-                return f"{detail} {hints[0]}"
+                return f"{detail}{port_hint} {hints[0]}"
             return (
                 f"{detail} Ensure POSTGRES_PASSWORD in config/.env.compose matches "
-                "the password Postgres was initialized with."
+                "the password Postgres was initialized with. If you changed "
+                "config/.env.compose after the first `docker compose up`, recreate "
+                "the volume: docker compose --env-file config/.env.compose down -v, "
+                "then .\\scripts\\dev\\compose-up.ps1 up -d postgres"
             )
         if "connection refused" in message or "could not connect to server" in message:
             return (
@@ -154,7 +165,7 @@ def verify_platform_engine(
             report.ok = False
             report.issues.append(
                 f"AGE graph {AGE_GRAPH_NAME} missing (run init-db/03-age-graph.sql "
-                f"or restart app bootstrap)"
+                f"or restart app bootstrap; read-only reserve per ADR-002)"
             )
 
     if require_pg_cron_job:

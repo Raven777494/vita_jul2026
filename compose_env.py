@@ -161,12 +161,28 @@ def compose_credential_warnings(project_root: Optional[Path] = None) -> list[str
     if os_password and compose_password and os_password != compose_password:
         warnings.append(
             "A stale OS/Machine environment variable DB_PASSWORD differs from "
-            "config/.env.compose. Local development ignores it and uses "
-            "config/.env.compose (which initialized Docker Postgres). To keep the "
-            "environment clean, remove the Machine-scope variable: "
+            "config/.env.compose. Local development ignores OS DB_PASSWORD and "
+            "DATABASE_URL, using config/.env.compose (which initialized Docker Postgres). "
+            "To keep the environment clean, remove the Machine-scope variable: "
             "[Environment]::SetEnvironmentVariable('DB_PASSWORD', $null, 'Machine') "
             "(run PowerShell as Administrator), then restart the terminal."
         )
+
+    os_database_url = os.getenv("DATABASE_URL")
+    if os_database_url and compose_password:
+        compose_url = compose.get("DATABASE_URL", "")
+        if compose_url and os_database_url != compose_url:
+            warnings.append(
+                "OS environment variable DATABASE_URL differs from config/.env.compose. "
+                "Local development ignores OS DATABASE_URL and builds the URL from "
+                "config/.env.compose credentials plus DB_HOST from .env.local."
+            )
+        elif not compose_url and "@" in os_database_url:
+            warnings.append(
+                "OS environment variable DATABASE_URL is set; local development "
+                "ignores it and builds the URL from config/.env.compose credentials "
+                "plus DB_HOST from .env.local."
+            )
 
     os_user = os.getenv("DB_USER")
     compose_user = compose.get("DB_USER") or compose.get("POSTGRES_USER", "")

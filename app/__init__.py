@@ -176,9 +176,17 @@ try:
     
     # 初始化 DBService
     db_manager = DBService()
-    db_initialized = True
-    
-    vita_logger.info("Database manager initialized [OK]")
+    from app.services.db_manager import db_manager as _core_db_manager
+
+    _db_health = _core_db_manager.health_check()
+    db_initialized = _db_health.get("status") == "healthy"
+    if db_initialized:
+        vita_logger.info("Database manager initialized [OK]")
+    else:
+        vita_logger.warning(
+            "Database unavailable: %s",
+            _db_health.get("error", "unknown"),
+        )
     
 except ImportError as e:
     vita_logger.error(f"Failed to import database service: {e}", exc_info=True)

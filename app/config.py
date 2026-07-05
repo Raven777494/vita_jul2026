@@ -92,6 +92,39 @@ def _resolve_db_credential(key: str, default: str = "") -> str:
             return file_value
     return compose_or_env(key, default)
 
+def _resolve_database_url() -> str:
+    """Build DATABASE_URL with the same credential precedence as DB_* fields.
+
+    Local host development ignores a stale OS-level DATABASE_URL (often exported
+    together with Machine-scope DB_PASSWORD) and builds from config/.env.compose
+    credentials plus DB_HOST from .env.local.
+    """
+    db_user = _resolve_db_credential("DB_USER", "postgres")
+    db_password = _resolve_db_credential("DB_PASSWORD", "")
+    db_host = os.getenv("DB_HOST") or ("postgres" if IS_RUNNING_IN_DOCKER else "127.0.0.1")
+    db_port = os.getenv("DB_PORT", "5432")
+    db_name = os.getenv("DB_NAME") or compose_or_env(
+        "DB_NAME", "vita_test" if IS_TESTING else "vita_db"
+    )
+    built = (
+        f"postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    )
+
+    local_dev = not (IS_PRODUCTION or IS_STAGING or IS_RUNNING_IN_DOCKER)
+    if local_dev:
+        return built
+
+    explicit = os.getenv("DATABASE_URL")
+    if explicit:
+        return explicit
+
+    if IS_RUNNING_IN_DOCKER:
+        docker_url = compose_or_env("DATABASE_URL", "")
+        if docker_url:
+            return docker_url
+
+    return built
+
 # ==================== .env 載入 ====================
 
 def _load_env_file() -> None:
@@ -389,21 +422,14 @@ class Config:
     TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "30"))
     AUTH_ENABLED = os.getenv("AUTH_ENABLED", "true").lower() == "true"
     
-    # ---------- 數據庫配置（密碼唯一來源：docker-compose.yml） ----------
+    # ---------- 數據庫配置（本地密碼：config/.env.compose；見 _resolve_db_credential） ----------
     DB_USER = _resolve_db_credential("DB_USER", "postgres")
     DB_PASSWORD = _resolve_db_credential("DB_PASSWORD", "")
     DB_HOST = os.getenv("DB_HOST") or ("postgres" if IS_DOCKER else "127.0.0.1")
     DB_PORT = os.getenv("DB_PORT", "5432")
     DB_NAME = os.getenv("DB_NAME") or compose_or_env("DB_NAME", "vita_test" if IS_TESTING else "vita_db")
 
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    if not DATABASE_URL:
-        if IS_DOCKER:
-            DATABASE_URL = compose_or_env("DATABASE_URL", "")
-        if not DATABASE_URL:
-            DATABASE_URL = (
-                f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-            )
+    DATABASE_URL = _resolve_database_url()
     
     DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
     DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))

@@ -592,6 +592,7 @@ class DatabaseManager:
     """
     
     def __init__(self):
+        self._ready = False
         try:
             inspector = inspect(sync_engine)
             existing_tables = inspector.get_table_names()
@@ -625,9 +626,11 @@ class DatabaseManager:
             self._ensure_pg_cron_jobs()
             
             db_logger.info("[DB INIT] Database initialized successfully [OK]")
+            self._ready = True
             
         except Exception as e:
             db_logger.error(f"[DB INIT] Failed: {e}", exc_info=True)
+            self._ready = False
     
     def _ensure_gsw_hnsw_index(self) -> None:
         """Ensure gsw_eternal_echoes uses HNSW (cosine), replacing legacy IVFFlat index."""
@@ -690,7 +693,11 @@ class DatabaseManager:
                 )
 
     def _ensure_age_graph(self) -> None:
-        """Create AGE graph vita_memory_graph (distinct from relational memory_graph table)."""
+        """Provision empty AGE graph shell (read-only reserve per ADR-002).
+
+        Distinct from relational table memory_graph. Application runtime must
+        not write cypher to this graph until a future ADR re-opens AGE writes.
+        """
         try:
             rows = self.execute_query(
                 "SELECT 1 FROM pg_extension WHERE extname = 'age' LIMIT 1"
@@ -1390,19 +1397,24 @@ class DatabaseManager:
 
     def health_check(self) -> Dict[str, Any]:
         """健康檢查"""
-        try:
-            self.execute_query("SELECT 1")
-            return {
-                'status': 'healthy',
-                'database': 'ok',
-                'timestamp': datetime.utcnow().isoformat()
-            }
-        except Exception as e:
+        if not getattr(self, "_ready", False):
             return {
                 'status': 'unhealthy',
-                'error': str(e),
+                'error': 'Database manager failed to initialize',
                 'timestamp': datetime.utcnow().isoformat()
             }
+        rows = self.execute_query("SELECT 1 AS ok")
+        if not rows or rows[0].get("ok") != 1:
+            return {
+                'status': 'unhealthy',
+                'error': 'Database query failed',
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        return {
+            'status': 'healthy',
+            'database': 'ok',
+            'timestamp': datetime.utcnow().isoformat()
+        }
             
     def close(self):
         """關閉所有連接"""
