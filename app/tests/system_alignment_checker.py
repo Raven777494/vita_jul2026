@@ -281,8 +281,33 @@ class SystemAlignmentChecker:
             if group_result['status'] == 'FAIL':
                 results['status'] = 'FAIL'
 
+        memory_result = self._check_memory_model_alignment()
+        results['checks']['memory_model'] = memory_result
+        if memory_result['status'] == 'FAIL':
+            results['status'] = 'FAIL'
+
         results['summary'] = self._generate_summary(results['checks'])
         return results
+
+    def _check_memory_model_alignment(self) -> Dict[str, Any]:
+        """Verify ADR-002 primary path and no runtime AGE dual-write (P4-4)."""
+        try:
+            from app.governance.memory_model_alignment import verify_memory_model_alignment
+        except Exception as exc:
+            return {
+                'name': 'Memory model alignment (ADR-002)',
+                'status': 'FAIL',
+                'checked': [],
+                'issues': [f"Cannot import memory_model_alignment: {exc}"],
+            }
+
+        report = verify_memory_model_alignment()
+        return {
+            'name': 'Memory model alignment (ADR-002)',
+            'status': 'PASS' if report.ok else 'FAIL',
+            'checked': list(report.checked),
+            'issues': list(report.issues),
+        }
 
     def _check_runtime(self, spec: Dict[str, Any]) -> Dict[str, Any]:
         """Execute live environment checks (database, extensions, etc.)."""
