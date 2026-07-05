@@ -1,6 +1,6 @@
 # Entity-Relationship Diagram
 
-Version: 0.1 (P4-1)
+Version: 0.2 (P4-4)
 
 Source of truth for columns and constraints: SQLAlchemy models in `app/services/db_manager.py`.
 
@@ -10,10 +10,10 @@ Source of truth for columns and constraints: SQLAlchemy models in `app/services/
 |-------|---------|------------|
 | Relational ORM tables | PostgreSQL `public` | `db_manager.py` + Alembic revisions |
 | Vector index (HNSW) | `gsw_eternal_echoes.embedding` | `init-db/02-gsw-hnsw-index.sql` + bootstrap |
-| Apache AGE graph | `vita_memory_graph` (separate from `memory_graph` table) | `init-db/03-age-graph.sql` |
+| Apache AGE graph | `vita_memory_graph` (separate from `memory_graph` table) | `init-db/03-age-graph.sql` — **read-only reserve** (ADR-002) |
 | pg_cron jobs | `cron.job` | `init-db/04-pg-cron-jobs.sql` |
 
-The relational table `memory_graph` stores JSONB node documents per user. The AGE graph `vita_memory_graph` is an extension-backed graph used by GSW/memory pipelines; it is not modeled as SQLAlchemy FK relationships.
+The relational table `memory_graph` stores JSONB node documents per user (primary structured graph path when feature writes ship). Semantic recall uses `gsw_eternal_echoes` with pgvector HNSW. The AGE graph `vita_memory_graph` is provisioned as an empty read-only shell per [ADR-002](../architecture/adr-002-memory-model.md); it is not used by GSW or memory_chain runtime code.
 
 ## Core user and session cluster
 

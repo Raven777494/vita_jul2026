@@ -16,7 +16,7 @@ Alembic is the **primary** path for relational DDL changes to SQLAlchemy models 
 
 1. Every ORM schema change starts with `alembic revision --autogenerate -m "describe change"`, manual review, then commit.
 2. Do not add new `CREATE TABLE` / `ALTER TABLE` for ORM entities in `init-db/` or bootstrap helpers.
-3. `init-db/` remains limited to PostgreSQL extensions, HNSW, Apache AGE graph provisioning, and pg_cron schedules.
+3. `init-db/` remains limited to PostgreSQL extensions, HNSW, Apache AGE graph shell (read-only reserve per [ADR-002](../architecture/adr-002-memory-model.md)), and pg_cron schedules.
 4. Bootstrap code may create missing indexes or extension objects idempotently, but must not diverge from the latest Alembic head.
 5. If drift is found between a live database and ORM models, add a corrective Alembic revision rather than patching SQL bootstrap files.
 

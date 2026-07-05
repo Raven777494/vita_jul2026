@@ -51,7 +51,7 @@ Step 3 cascades (ON DELETE CASCADE) to:
 
 | Asset | Action |
 |-------|--------|
-| Apache AGE graph nodes | Delete AGE vertices/edges for user via graph API (not relational FK) |
+| Apache AGE graph nodes | No action required while graph is read-only empty (ADR-002); if populated in future, delete vertices/edges via graph API |
 | VictoriaLogs | Separate retention / delete-by-user query (ops runbook) |
 | Filesystem private logs | Redaction or log rotation policy; no automatic wipe in P4-1 |
 | Redis session cache | Invalidate keys matching user/session prefix |

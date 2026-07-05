@@ -1,6 +1,6 @@
 # Data Flow (Chat Turn)
 
-Version: 0.1 (P1)
+Version: 0.2 (P4-4)
 
 ## Request path
 
@@ -15,20 +15,20 @@ Version: 0.1 (P1)
 
 ## Persistence
 
-| Data | Store | Index |
-|------|-------|-------|
-| Turns | PostgreSQL conversation tables | session_id |
-| Embeddings | gsw_eternal_echoes | HNSW cosine |
-| Graph memory (AGE) | vita_memory_graph | AGE (when Platform image used) |
-| Relational graph | memory_graph table | SQL |
-| Session cache | Redis | TTL keys |
+| Data | Store | Index | Write path (ADR-002) |
+|------|-------|-------|----------------------|
+| Turns | PostgreSQL conversation tables | session_id | Active |
+| Semantic recall | `gsw_eternal_echoes` | HNSW cosine (pgvector) | **Primary** — GSW / memory chain |
+| Structured graph nodes | `memory_graph` table | user_id | Schema ready; writes deferred |
+| AGE graph shell | `vita_memory_graph` | AGE extension | **Read-only reserve** — provisioned, no app writes |
+| Session cache | Redis | TTL keys | Active |
 
 ## Observability flow
 
 App loggers -> local files -> VictoriaLogs shipper (non-private) -> VictoriaLogs UI
 
-## Migration strategy (P1)
+## Migration strategy
 
-- SQL bootstrap: `init-db/*.sql` on first Postgres volume init
-- Runtime ensure: `db_manager` (_ensure_platform_extensions, HNSW, AGE graph, pg_cron)
-- Future: Alembic migrations for schema changes (tracked in tech-debt register)
+- SQL bootstrap: `init-db/*.sql` on first Postgres volume init (extensions, HNSW, AGE graph shell, pg_cron)
+- Runtime ensure: `db_manager` (_ensure_platform_extensions, HNSW, AGE graph shell, pg_cron)
+- Relational DDL: Alembic (`docs/database/migrations.md`, ADR-002)

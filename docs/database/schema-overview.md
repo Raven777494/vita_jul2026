@@ -1,6 +1,6 @@
 # Schema Overview
 
-Version: 0.2 (P4-1)
+Version: 0.3 (P4-4)
 
 ## Bootstrap SQL (`init-db/`)
 
@@ -8,7 +8,7 @@ Version: 0.2 (P4-1)
 |------|---------|
 | `01-extensions.sql` | vector, age, pg_cron |
 | `02-gsw-hnsw-index.sql` | HNSW on gsw_eternal_echoes |
-| `03-age-graph.sql` | Apache AGE graph vita_memory_graph |
+| `03-age-graph.sql` | AGE graph shell `vita_memory_graph` (read-only reserve, ADR-002) |
 | `04-pg-cron-jobs.sql` | Scheduled cleanup old GSW echoes |
 
 ## Core ORM domains (`app/services/db_manager.py`)
@@ -17,8 +17,8 @@ Version: 0.2 (P4-1)
 |--------|-------|
 | Users / sessions | Conversation state, escalation flags |
 | Turns | Message history |
-| gsw_eternal_echoes | Vector embeddings (pgvector + HNSW) |
-| memory_graph | Relational graph nodes (JSONB) — distinct from AGE graph |
+| gsw_eternal_echoes | Vector embeddings (pgvector + HNSW) — **primary semantic recall** (ADR-002) |
+| memory_graph | Relational graph nodes (JSONB) — primary structured graph path when writes ship |
 | crisis_events | Internal crisis audit (hotline_provided legacy column — not user hotline delivery) |
 | reality_facts | KAG verifiable facts |
 
