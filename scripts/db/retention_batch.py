@@ -120,7 +120,7 @@ def run_retention(
         if deleted != matched:
             emit(
                 f"[WARN] {step.table}: counted {matched} eligible but deleted {deleted} "
-                "(check DB logs; see TD-003 execute_update error handling)"
+                "(possible concurrent delete or rowcount mismatch)"
             )
 
     total = sum(counts.values())
@@ -140,14 +140,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from app.config import config
-    from app.services.db_manager import db_manager
+    from app.services.db_manager import DatabaseUpdateError, db_manager
 
     dry_run = not args.apply
-    counts = run_retention(
-        db_manager,
-        config.SESSION_MAX_RETENTION_DAYS,
-        dry_run=dry_run,
-    )
+    try:
+        counts = run_retention(
+            db_manager,
+            config.SESSION_MAX_RETENTION_DAYS,
+            dry_run=dry_run,
+        )
+    except DatabaseUpdateError:
+        print("[FAIL] Retention batch aborted due to database update error", file=sys.stderr)
+        return 1
 
     if all(n == 0 for n in counts.values()):
         emit = print

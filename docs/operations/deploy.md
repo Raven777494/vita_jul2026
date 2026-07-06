@@ -1,6 +1,6 @@
 # Deploy Operations
 
-Version: 0.2 (P3-5 build + smoke + SSH deploy)
+Version: 0.3 (P5-3 staging drill record)
 
 ## Overview
 
@@ -182,5 +182,63 @@ volumes:
 ## Related
 
 - [../security/secrets-policy.md](../security/secrets-policy.md)
-- [../governance/tech-debt-register.md](../governance/tech-debt-register.md) (TD-006 closed P2-B)
-- [../governance/execution-program.md](../governance/execution-program.md) (P3-5)
+- [../governance/tech-debt-register.md](../governance/tech-debt-register.md) (TD-006 closed P2-B; TD-009 partial P3-5)
+- [../governance/execution-program.md](../governance/execution-program.md) (P3-5, P5-3)
+
+## Staging deploy drill record (P5-3)
+
+Use this appendix to record staging deploy and rollback drills. Store completed records in external ops storage (not repo secrets).
+
+### When to run
+
+- Before first production go-live
+- After major deploy workflow changes
+- At least once per quarter while staging is active
+
+### Deploy drill (GitHub Actions)
+
+1. Open **Actions -> Deploy -> Run workflow**
+2. Set `environment=staging`, `dry_run=true` — confirm **build-and-smoke** job green
+3. Re-run with `dry_run=false` when `DEPLOY_HOST` and SSH secrets are configured
+4. On host: confirm `GET /health` 200 and `/metrics` contains `vita_crisis`
+
+### Rollback drill (deploy host)
+
+```bash
+export PREVIOUS_IMAGE_TAG=<known-good-sha>
+bash scripts/deploy/rollback.sh
+```
+
+Confirm smoke passes after rollback.
+
+### Record template
+
+| Field | Value |
+|-------|-------|
+| Drill ID | DEP-DRILL-YYYY-MM-NNN |
+| Date (UTC) | |
+| Operator | |
+| Environment | staging |
+| Deploy workflow run URL | |
+| Image tag deployed | |
+| Smoke result | pass / fail |
+| Rollback performed | yes / no |
+| Rollback tag | |
+| Rollback smoke result | pass / fail / n/a |
+| Notes | |
+
+### Example (local smoke only — 2026-07-06)
+
+| Field | Value |
+|-------|-------|
+| Drill ID | DEP-DRILL-2026-07-001 |
+| Date (UTC) | 2026-07-06 |
+| Operator | Engineering |
+| Environment | local (compose.ci smoke) |
+| Deploy workflow run URL | n/a — local `docker compose` + `smoke_check.sh` |
+| Image tag deployed | vita-api:local |
+| Smoke result | pass |
+| Rollback performed | yes (local) |
+| Rollback tag | previous local tag |
+| Rollback smoke result | pass |
+| Notes | Full GHA staging run pending `DEPLOY_HOST` secrets |

@@ -485,6 +485,7 @@ alembic current
 
 ## Related documents
 
+- [governance-matrix.md](governance-matrix.md) — 12-item scorecard (updated with P5/P6 task list)
 - `docs/governance/tech-debt-register.md`
 - `docs/governance/branch-strategy.md`
 - `docs/operations/deploy.md`

@@ -41,6 +41,11 @@ audit_logger = get_private_logger('audit')
 
 Base = declarative_base()
 
+
+class DatabaseUpdateError(RuntimeError):
+    """Raised when execute_update fails after rollback (TD-003)."""
+
+
 # ==================== 同步引擎配置 ====================
 
 # 安全獲取連接池參數，確保即使 Config 類異常也能正常啟動
@@ -811,7 +816,7 @@ class DatabaseManager:
         except Exception as e:
             session.rollback()
             db_logger.error(f"[EXEC UPDATE] Failed: {e}")
-            return 0
+            raise DatabaseUpdateError(f"execute_update failed: {e}") from e
         finally:
             session.close()
     
