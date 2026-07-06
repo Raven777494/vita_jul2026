@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -51,6 +52,16 @@ CRISIS_INTERCEPTION_RATE = Gauge(
 
 _internal_signal_count = 0
 _internal_intercepted_count = 0
+
+
+def _register_crisis_metric_label_series() -> None:
+    """Expose labeled counter HELP/TYPE at scrape time (before first crisis signal)."""
+    for band in ("moderate", "elevated", "high", "critical"):
+        CRISIS_SIGNALS_TOTAL.labels(risk_band=band)
+
+
+_register_crisis_metric_label_series()
+CRISIS_INTERCEPTION_RATE.set(1.0)
 
 
 @dataclass(frozen=True)
@@ -110,6 +121,15 @@ def crisis_interception_rate() -> float:
         return _internal_intercepted_count / _internal_signal_count
 
 
+def _should_emit_crisis_log_event(source: str) -> bool:
+    """Skip VictoriaLogs/file crisis metric lines during pytest (P5 steady-state)."""
+    if source == "test":
+        return False
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    return True
+
+
 def record_crisis_interception_outcome(
     *,
     risk_assessment: Any,
@@ -119,6 +139,7 @@ def record_crisis_interception_outcome(
     success: bool,
     user_id: str = "",
     session_id: str = "",
+    source: str = "safety_hub",
 ) -> Optional[str]:
     """Record metrics and VictoriaLogs event when a crisis signal was present.
 
@@ -164,8 +185,10 @@ def record_crisis_interception_outcome(
         "crisis_keyword_count": len(snapshot.crisis_keywords),
         "user_id": user_id or "unknown",
         "session_id": session_id or "unknown",
+        "source": source,
     }
-    _emit_crisis_log_event(payload)
+    if _should_emit_crisis_log_event(source):
+        _emit_crisis_log_event(payload)
     return outcome
 
 
@@ -187,6 +210,7 @@ def _emit_crisis_log_event(payload: Dict[str, Any]) -> None:
         "risk_level": payload.get("risk_level"),
         "risk_band": payload.get("risk_band"),
         "escalated": payload.get("escalated"),
+        "source": payload.get("source", "safety_hub"),
     }
     setattr(record, "vita_fields", vita_fields)
     _crisis_logger.handle(record)

@@ -1,0 +1,18 @@
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: vita-clinical-webhook
+    group_by:
+      - grafana_folder
+      - alertname
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    routes:
+      - receiver: vita-clinical-webhook
+        object_matchers:
+          - - severity
+            - =
+            - clinical
+        continue: false

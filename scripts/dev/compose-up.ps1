@@ -42,6 +42,12 @@ $shouldBuildApi = -not $SkipBuild -and (
 
 Push-Location $ProjectRoot
 try {
+    Write-Host "[INFO] Rendering Grafana clinical alert contact point..."
+    & python (Join-Path $ProjectRoot "scripts\observability\render_grafana_alert_contact.py")
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
     if ($shouldBuildApi) {
         Write-Host "[INFO] Building vita-api image (root modules must match Dockerfile)..."
         & docker compose --env-file config/.env.compose build vita-api

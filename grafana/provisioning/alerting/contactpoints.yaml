@@ -1,0 +1,15 @@
+# Clinical alert routing (P5-1). Webhook URL is rendered at compose-up time when
+# GRAFANA_CLINICAL_ALERT_WEBHOOK_URL or ESCALATION_WEBHOOK_URL is set; otherwise
+# uses a no-op URL so alerts appear in Grafana UI only (dev baseline).
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: vita-clinical-webhook
+    receivers:
+      - uid: vita-clinical-webhook
+        type: webhook
+        settings:
+          url: http://127.0.0.1:65534/noop
+          httpMethod: POST
+        disableResolveMessage: false

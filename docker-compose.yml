@@ -169,6 +169,9 @@ services:
     networks:
       - vita-network
     restart: unless-stopped
+    depends_on:
+      vita-api:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8428/health | grep -q OK"]
       interval: 30s
@@ -201,6 +204,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SERVER_ROOT_URL: http://grafana:3000
+      GF_INSTALL_PLUGINS: victoriametrics-logs-datasource
+      GF_UNIFIED_ALERTING_ENABLED: 'true'
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -210,7 +215,9 @@ services:
       - vita-network
     restart: unless-stopped
     depends_on:
-      postgres:
+      vmsingle:
+        condition: service_healthy
+      victorialogs:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]

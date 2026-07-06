@@ -6,6 +6,6 @@
 # Required log fields (from app/metrics/crisis_metrics.py via VictoriaLogs shipper):
 #   service, log_type, event_type, outcome
 
-service:"vita-api" log_type:"crisis" event_type:"crisis_interception" outcome:"missed"
+service:"vita-api" log_type:"crisis" event_type:"crisis_interception" outcome:"missed" source:"safety_hub"
 | stats count() as missed
 | filter missed:>0

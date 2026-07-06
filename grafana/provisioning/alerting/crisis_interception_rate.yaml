@@ -17,7 +17,10 @@ groups:
             datasourceUid: vita-vmsingle
             model:
               editorMode: code
-              expr: vita_crisis_interception_rate
+              expr: >-
+                sum(increase(vita_crisis_intercepted_total[15m]))
+                /
+                sum(increase(vita_crisis_signals_total[15m]))
               instant: true
               range: false
               refId: A
