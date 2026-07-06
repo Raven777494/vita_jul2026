@@ -25,6 +25,18 @@ import sys
 logger = logging.getLogger(__name__)
 
 
+def _logging_streams_open(log: logging.Logger) -> bool:
+    """Return False when handler streams are closed (pytest teardown / atexit)."""
+    current: Optional[logging.Logger] = log
+    while current is not None:
+        for handler in getattr(current, "handlers", []):
+            stream = getattr(handler, "stream", None)
+            if stream is not None and getattr(stream, "closed", False):
+                return False
+        current = getattr(current, "parent", None)
+    return True
+
+
 class VectorServiceConfig:
     """向量服務配置常數"""
     
@@ -56,6 +68,7 @@ class VectorService:
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
         self.logger = logger
+        self._closed = False
         
         # ========== 直接從 config 讀取 MEMORY_LLM_* ==========
         try:
@@ -712,21 +725,32 @@ class VectorService:
         self.logger.info("[CIRCUIT] Manually reset")
     
     def close(self) -> None:
-        """優雅關閉資源"""
+        """優雅關閉資源（idempotent；直譯器關閉階段不寫日誌）"""
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+
         try:
             if self.session:
                 self.session.close()
-            
-            self.logger.info(
-                f"[CLOSE] VectorService closed "
-                f"(final stats: {self._stats.copy()})"
-            )
-        
-        except Exception as e:
-            self.logger.warning(f"[CLOSE] Error: {str(e)[:100]}")
-    
+        except Exception:
+            pass
+
+        # 直譯器關閉 / pytest teardown 時 log handler 可能已關閉，
+        # 對已關閉的 stream 寫入會觸發 "I/O operation on closed file"
+        if not sys.is_finalizing() and _logging_streams_open(self.logger):
+            try:
+                self.logger.info(
+                    f"[CLOSE] VectorService closed "
+                    f"(final stats: {self._stats.copy()})"
+                )
+            except Exception:
+                pass
+
     def __del__(self):
-        """析構函式"""
+        """析構函式：直譯器關閉階段不做日誌與非必要清理"""
+        if sys.is_finalizing():
+            return
         try:
             self.close()
         except Exception:
