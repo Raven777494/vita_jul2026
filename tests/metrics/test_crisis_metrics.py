@@ -66,6 +66,7 @@ def test_record_missed_when_process_failed():
         success=False,
         user_id="u2",
         session_id="s2",
+        source="test",
     )
     assert outcome == "missed"
     assert crisis_interception_rate() == 0.0
