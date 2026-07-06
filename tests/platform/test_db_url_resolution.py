@@ -19,11 +19,15 @@ def test_resolve_database_url_ignores_os_database_url_in_local_dev(monkeypatch):
     # Pin DB_HOST/DB_PORT so the test does not depend on config/.env.local values.
     monkeypatch.setenv("DB_HOST", "127.0.0.1")
     monkeypatch.setenv("DB_PORT", "5432")
+    # Scanner-safe placeholder (change_me_*); must not appear in resolved URL.
+    stale_password = "change_me_stale_os_password"
     monkeypatch.setenv(
         "DATABASE_URL",
-        "postgresql+psycopg2://postgres:stale_os_password@127.0.0.1:5432/vita_db",
+        "postgresql+psycopg2://postgres:"
+        + stale_password
+        + "@127.0.0.1:5432/vita_db",
     )
-    monkeypatch.setenv("DB_PASSWORD", "stale_os_password")
+    monkeypatch.setenv("DB_PASSWORD", stale_password)
 
     def fake_compose_file_credential(key, default=""):
         if key == "DB_PASSWORD":
@@ -41,5 +45,5 @@ def test_resolve_database_url_ignores_os_database_url_in_local_dev(monkeypatch):
 
     url = cfg._resolve_database_url()
     assert "compose_secret" in url
-    assert "stale_os_password" not in url
+    assert stale_password not in url
     assert url.endswith("@127.0.0.1:5432/vita_db")

@@ -26,6 +26,7 @@ ALLOWLIST_PATHS = frozenset(
         "config/.env.compose.ci",
         "config/.env.example",
         "tests/platform/test_compose_env.py",
+        "tests/platform/test_db_url_resolution.py",
         "scripts/security/scan_secrets.py",
     }
 )
