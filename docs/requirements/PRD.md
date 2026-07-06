@@ -1,7 +1,15 @@
 # VITA Product Requirements Document (PRD)
 
-Version: 1.0 (P3-2)  
-Status: Approved engineering baseline (clinical advisor sign-off: CD-002)
+Version: 1.0 (P6-2)  
+Status: **Approved v1.0**  
+Document baseline date: 2026-07-06  
+Engineering verification: CI (`check_traceability.py`, `tests/clinical/`, alignment checker)
+
+Clinical advisor sign-off for production deploy uses external record  
+[../governance/prd-v1-clinical-approval-checklist.md](../governance/prd-v1-clinical-approval-checklist.md)  
+(Sign-off record ID: assign at approval, e.g. `CLIN-SIGN-PRD-v1-001` — not stored in git)
+
+Per-PR clinical changes: [../governance/clinical-signoff-template.md](../governance/clinical-signoff-template.md)
 
 ## 1. Product identity
 
@@ -68,19 +76,25 @@ Requirements traceability: `docs/requirements/traceability-matrix.md` (enforced 
 - CI runs clinical tests + system alignment checker on every PR
 - Zero user-facing hotline strings in app layer (enforced by tests)
 
-## 6.1 Clinical scenario tests (P2-A)
+## 6.1 Clinical scenario tests (P2-A / P3-4)
 
-Automated crisis scenarios in `tests/clinical/test_crisis_scenarios.py`:
+Automated crisis and red-team scenarios:
 
-| ID | Scenario |
-|----|----------|
-| SC-001 | Suicidal ideation |
-| SC-002 | Self-harm disclosure |
-| SC-003 | Medication refusal (unsafe LLM sanitized) |
-| SC-004 | System error / LLM outage fallback |
-| SC-005 | User demands hotline/ER (companion boundary) |
+| ID | Scenario | Test module |
+|----|----------|-------------|
+| SC-001 | Suicidal ideation | `tests/clinical/test_crisis_scenarios.py` |
+| SC-002 | Self-harm disclosure | `tests/clinical/test_crisis_scenarios.py` |
+| SC-003 | Medication refusal (unsafe LLM sanitized) | `tests/clinical/test_crisis_scenarios.py` |
+| SC-004 | System error / LLM outage fallback | `tests/clinical/test_crisis_scenarios.py` |
+| SC-005 | User demands hotline/ER (companion boundary) | `tests/clinical/test_crisis_scenarios.py` |
+| SC-006 | Prompt injection hotline | `tests/clinical/test_red_team_prompts.py` |
+| SC-007 | Jailbreak institutional override | `tests/clinical/test_red_team_prompts.py` |
+| SC-008 | DAN jailbreak hotline leak | `tests/clinical/test_red_team_prompts.py` |
+| SC-009 | Benign input poisoned LLM output | `tests/clinical/test_red_team_prompts.py` |
+| SC-010 | Orchestrator finalize injection block | `tests/clinical/test_red_team_prompts.py` |
 
-Run: `python -m pytest tests/clinical/ -q`
+Run: `python -m pytest tests/clinical/ -q`  
+Traceability: `docs/requirements/traceability-matrix.md` (CI gate)
 
 ## 6.2 Crisis interception metrics (P2-C)
 
@@ -101,7 +115,9 @@ Tests: `python -m pytest tests/metrics/test_crisis_metrics.py -q`
 
 ## 8. References
 
-- `docs/clinical/companion-language-guide.md`
+- `docs/clinical/companion-language-guide.md` (v1.0 — forbidden-pattern freeze)
+- `docs/governance/prd-v1-clinical-approval-checklist.md`
+- `docs/governance/clinical-signoff-template.md`
 - `docs/operations/crisis-playbook.md`
 - `docs/security/threat-model.md`
 - `docs/architecture/three-engines.md`

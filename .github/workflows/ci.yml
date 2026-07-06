@@ -67,6 +67,12 @@ jobs:
       - name: Verify requirements traceability matrix
         run: python scripts/governance/check_traceability.py
 
+      - name: Verify P6-1 team governance deliverables
+        run: python scripts/governance/verify_p6_team_governance.py
+
+      - name: Verify P6-2 requirements sign-off deliverables
+        run: python scripts/governance/verify_p6_requirements_signoff.py
+
       - name: Run clinical and red-team tests (SC-001..010)
         run: python -m pytest tests/clinical/ -q --tb=short
 

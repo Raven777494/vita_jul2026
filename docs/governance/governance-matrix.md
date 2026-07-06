@@ -30,7 +30,7 @@ Baseline: P0–P4 工程交付完成（develop `a118857`）
 | 階段 P3 | ~**88%** |
 | 階段 P4 | ~**92%** |
 | 階段 P5 | ~**75%** |
-| 階段 P6 | ~**12%** |
+| 階段 P6 | ~**70%** |
 
 ```mermaid
 flowchart LR
@@ -54,7 +54,7 @@ flowchart LR
 
 | # | 治理項 | 工程 % | 營運 % | 組織 % | 綜合 % | 達標等級 | 主要證據 | 剩餘缺口 |
 |---|--------|--------|--------|--------|--------|----------|----------|----------|
-| 1 | 需求分析 | 88 | 0 | 30 | **30** | 雛形→基線 | `docs/requirements/PRD.md` v1.0、`traceability-matrix.md`、CI `check_traceability.py` | CD-002 臨床顧問正式簽核；PRD 仍為 engineering baseline |
+| 1 | 需求分析 | 92 | 0 | 70 | **0** | 工程達標 | PRD Approved v1.0、traceability 100%、companion freeze | 外部 PRD 簽核記錄（production 前） |
 | 2 | 系統架構 | 92 | 25 | — | **25** | 雛形 | `three-engines.md`、`safety-critical-path.md`、ADR-001/002 | 危機路徑無全鏈路 SLO 標籤；Compute 依賴外部 Seele |
 | 3 | 資料庫設計 | 90 | 45 | — | **45** | 雛形 | ER v0.2、data-classification、retention、Alembic 基線、TD-001 關 | `DELETE /user/{id}` 抹除 API 未實作；retention 排程營運驗證待記錄 |
 | 4 | 資安防禦 | 82 | 15 | — | **15** | 雛形 | `threat-model.md`、sanitizer、red-team CI、`key-rotation-runbook.md` | staging 金鑰輪替演練未記錄；威脅模型 v0.1 |
@@ -64,14 +64,14 @@ flowchart LR
 | 8 | CI/CD | 80 | 30 | — | **30** | 雛形 | `ci.yml` 完整、`deploy.yml` build+smoke+SSH | TD-009 partial；staging deploy+rollback 演練未記錄 |
 | 9 | 線上監控 | 72 | 22 | — | **22** | 雛形 | VictoriaLogs/Metrics、crisis metrics、Grafana JSON 在 repo | TD-008 partial；告警路由、staging live 未證明 |
 | 10 | 異狀除錯 | 85 | 45 | — | **45** | 雛形 | Runbooks v1.0、on-call/troubleshooting、drill script、tabletop template | 實名 roster 未填；tabletop 外部記錄待執行 |
-| 11 | 團隊協作 | 35 | 0 | 25 | **0** | 未啟動 | `RACI.md` v0.1 模板、PR template 雛形 | 姓名未填、無 clinical-signoff-template、PR 未強制臨床簽核 |
+| 11 | 團隊協作 | 75 | 0 | 40 | **0** | 雛形 | RACI v1.0、clinical-signoff-template、PR 強制勾選 | 外部 roster 實名；P6-1.4 release 歸檔 |
 | 12 | 技術債 | 88 | 55 | 50 | **55** | 雛形 | TD-003/008 關；Review log；audit script | TD-009 開；GHA staging 實跑待 secrets |
 
 ### Exit criteria 勾選（對齊 execution-program）
 
 | # | Exit criteria | 狀態 |
 |---|---------------|------|
-| 1 | PRD v1.0 signed | 部分 — 工程基線已核准，臨床簽核 pending (CD-002) |
+| 1 | PRD v1.0 signed | 部分 — Approved v1.0 in repo; external advisor record before production |
 | 1 | Traceability matrix → code + tests | 是 — CI gate |
 | 2 | Single crisis owner path documented | 是 — ADR-001 + safety-critical-path |
 | 2 | ADR for dual-path resolution | 是 — ADR-002 (memory) |
@@ -96,9 +96,9 @@ flowchart LR
 | 10 | Runbooks v1.0 | **否** — 仍 v0.1 |
 | 10 | On-call roster external | **否** |
 | 10 | Escalation notifications not stub | 是 — webhook 模組已實作 |
-| 11 | RACI published | 部分 — 模板，姓名 TBD |
-| 11 | PR + clinical sign-off enforced | **否** |
-| 12 | TD/CD closed or accepted with expiry | 部分 — TD-009、CD-002 開；Review log 已建立 |
+| 11 | RACI published | 部分 — v1.0 + 外部 roster 政策 |
+| 11 | PR + clinical sign-off enforced | 是 — PR template 強制區塊 |
+| 12 | TD/CD closed or accepted with expiry | 部分 — TD-009 開；CD-002 關 P6-2 |
 | 12 | Monthly review | **否** |
 
 ---
@@ -183,23 +183,37 @@ python -m pytest tests/governance/test_execute_update_audit.py tests/governance/
 
 對齊 [execution-program.md § P6](execution-program.md#p6--organization-and-clinical-governance)。
 
-### P6-1 團隊協作（治理 #11）— 目標綜合 80%+（多人團隊）
+### P6-1 團隊協作（治理 #11）— 目標綜合 80%+
 
-| 序 | 任務 | 交付物 | 驗收 |
-|----|------|--------|------|
-| P6-1.1 | 填寫 `RACI.md` Named roles | 姓名 + 聯絡方式 | 無 TBD |
-| P6-1.2 | 新增 `docs/governance/clinical-signoff-template.md` | 簽核表模板 | PR 可附連結 |
-| P6-1.3 | 更新 `.github/PULL_REQUEST_TEMPLATE.md` | 臨床路徑變更強制勾選 | `app/clinical/`、`tests/clinical/` 變更需顧問簽核 |
-| P6-1.4 | 最近一次 production release 臨床檢查表歸檔 | 外部儲存（非 repo） | Ops/Clinical 確認 |
+| 序 | 任務 | 交付物 | 驗收 | 狀態 |
+|----|------|--------|------|------|
+| P6-1.1 | RACI v1.0 + 外部 roster 政策 | `docs/governance/RACI.md` | 矩陣 + 外部 roster 欄位 | Done |
+| P6-1.2 | 臨床簽核模板 | `clinical-signoff-template.md` | SC-001..010 清單 | Done |
+| P6-1.3 | PR template 臨床路徑強制勾選 | `.github/PULL_REQUEST_TEMPLATE.md` | app/clinical + tests/clinical | Done |
+| P6-1.4 | Production release 簽核歸檔 | 外部儲存 | 最近一次 release 有記錄 | Pending go-live |
+
+**Verify:**
+
+```powershell
+python scripts/governance/verify_p6_team_governance.py
+python -m pytest tests/governance/test_p6_team_governance_verify.py -q
+```
 
 ### P6-2 需求最終簽核（治理 #1 達 100%）
 
-| 序 | 任務 | 交付物 | 驗收 |
-|----|------|--------|------|
-| P6-2.1 | 臨床顧問審閱 PRD + companion guide + SC 套件 | 審閱記錄 | 清單全勾 |
-| P6-2.2 | PRD header → **Approved v1.0** + 日期 + 簽名 | `docs/requirements/PRD.md` | 移除 engineering-only 字樣 |
-| P6-2.3 | 凍結 forbidden-pattern；變更需 ADR + 臨床簽核 | companion-language-guide 版本政策 | 文件段落新增 |
-| P6-2.4 | 關閉 CD-002 | tech-debt-register | CD-002 → Closed P6 |
+| 序 | 任務 | 交付物 | 驗收 | 狀態 |
+|----|------|--------|------|------|
+| P6-2.1 | 臨床顧問審閱 PRD + companion + SC | `prd-v1-clinical-approval-checklist.md` | 外部清單 SC-001..010 | Done (template) |
+| P6-2.2 | PRD header Approved v1.0 | `docs/requirements/PRD.md` | 移除 engineering-only | Done |
+| P6-2.3 | forbidden-pattern 凍結政策 | `companion-language-guide.md` v1.0 | ADR + 臨床簽核 | Done |
+| P6-2.4 | 關閉 CD-002 | tech-debt-register | Closed P6-2 | Done |
+
+**Verify:**
+
+```powershell
+python scripts/governance/verify_p6_requirements_signoff.py
+python -m pytest tests/governance/test_p6_requirements_signoff_verify.py -q
+```
 
 ---
 

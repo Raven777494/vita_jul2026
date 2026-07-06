@@ -66,3 +66,4 @@ python scripts/observability/render_grafana_alert_contact.py
 - [crisis-playbook.md](crisis-playbook.md) — clinical internal response
 - [troubleshooting.md](troubleshooting.md) — symptom to command index
 - [../governance/RACI.md](../governance/RACI.md) — accountability matrix
+- [../governance/clinical-signoff-template.md](../governance/clinical-signoff-template.md) — clinical PR sign-off

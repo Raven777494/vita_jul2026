@@ -1,7 +1,7 @@
 # Requirements Traceability Matrix
 
-Version: 1.0 (P3-2)  
-PRD: `docs/requirements/PRD.md` v1.0  
+Version: 1.0 (P6-2)  
+PRD: `docs/requirements/PRD.md` v1.0 Approved (P6-2)  
 CI gate: `python scripts/governance/check_traceability.py`
 
 Link every active requirement to implementation and automated verification.

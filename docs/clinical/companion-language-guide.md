@@ -1,7 +1,8 @@
 # Companion Language Guide
 
-Version: 0.1 (P0)  
-Audience: Prompt authors, safety engineers, clinical advisors
+Version: 1.0 (P6-2) — **frozen baseline**  
+Audience: Prompt authors, safety engineers, clinical advisors  
+PRD: [../requirements/PRD.md](../requirements/PRD.md) v1.0 Approved
 
 ## Purpose
 
@@ -16,9 +17,10 @@ VITA speaks as a **life companion**, not as a hospital intake system. User-facin
 | 3. Recall resources | User-owned, not institutional | "Was there a person, place, or small thing that helped you even a little before?" |
 | 4. Gentle connection | Optional, non-command | "If you wish, someone you trust could know you are having a hard night." |
 
-## Forbidden user-facing patterns
+## Forbidden user-facing patterns (frozen v1.0)
 
-Enforced in code via `FORBIDDEN_PATTERNS` in `app/clinical/companion_language_policy.py`:
+Enforced in code via `FORBIDDEN_PATTERNS` in `app/clinical/companion_language_policy.py`.  
+**This list is frozen at v1.0.** Relaxing or removing a pattern requires ADR + clinical sign-off (below).
 
 - Hotline names and numbers (e.g. 2389-2222)
 - ER / hospitalization / restraint language
@@ -26,6 +28,9 @@ Enforced in code via `FORBIDDEN_PATTERNS` in `app/clinical/companion_language_po
 - Medication directives ("你應該吃藥")
 - User-visible escalation ("已通知同事", "通報")
 - API error text with emergency call instructions
+
+Adding a new forbidden pattern: allowed with ADR + clinical sign-off + test updates.  
+Removing or weakening a pattern: **clinical advisor approval required** (RACI **A**).
 
 ## Allowed safety model
 
@@ -51,13 +56,28 @@ Internal escalation must **not** be exposed as "you have been reported."
 
 Safety messaging score rewards companion keywords (presence, grounding), not institutional referrals.
 
-## Change control
+## Version policy and change control (P6-2)
 
-Any change to `companion_language_policy.py` or crisis prompts requires:
+| Change type | Required before merge |
+|-------------|----------------------|
+| Typo / clarifying doc only (no policy change) | Engineering review |
+| New companion reply template (same forbidden set) | `pytest tests/clinical/` + PR clinical sign-off if user-visible |
+| Modify `FORBIDDEN_PATTERNS` or crisis ladder steps | **ADR** in `docs/architecture/` + [clinical-signoff-template.md](../governance/clinical-signoff-template.md) + traceability update |
+| PRD requirement change | PRD version bump + [prd-v1-clinical-approval-checklist.md](../governance/prd-v1-clinical-approval-checklist.md) for major releases |
 
-1. Update this document
-2. Run `pytest tests/clinical/`
-3. PR review with clinical advisor when available
+Workflow:
+
+1. Draft ADR (architecture impact) when policy code changes
+2. Update this guide and `companion_language_policy.py` in the same PR
+3. Run verification:
+   ```powershell
+   python -m pytest tests/clinical/ -q
+   python scripts/governance/check_traceability.py
+   python app/tests/system_alignment_checker.py
+   ```
+4. Complete clinical sign-off when PR touches `app/clinical/` or `tests/clinical/` (see `.github/PULL_REQUEST_TEMPLATE.md`)
+
+Production PRD baseline approval (one-time): [../governance/prd-v1-clinical-approval-checklist.md](../governance/prd-v1-clinical-approval-checklist.md)
 
 ## Testing
 
@@ -66,4 +86,4 @@ python -m pytest tests/clinical/ -q
 python app/tests/system_alignment_checker.py
 ```
 
-Clinical crisis scenarios (P2-A): `tests/clinical/test_crisis_scenarios.py` — SC-001 through SC-005 aligned with PRD section 4.
+Clinical crisis scenarios (P2-A / P3-4): SC-001 through SC-010 — see PRD section 6.1 and `docs/requirements/traceability-matrix.md`.

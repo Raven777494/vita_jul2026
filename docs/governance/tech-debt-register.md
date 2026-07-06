@@ -21,7 +21,7 @@ Governance: [#12 Technical debt](../governance/execution-program.md#p5-3-technic
 | ID | Item | Risk | Priority | Target | Governance | Phase | Notes |
 |----|------|------|----------|--------|------------|-------|-------|
 | CD-001 | Expand clinical scenario test suite beyond language policy | High | P2 | Closed P3-4 | #3 | P3 | SC-001..010 + traceability CI gate |
-| CD-002 | Clinical advisor sign-off process | Medium | P2 | P6 | #11 | P6 | PRD v1.0 engineering baseline approved; formal sign-off pending |
+| CD-002 | Clinical advisor sign-off process | Medium | P2 | Closed P6-2 | #1/#11 | P6 | PR/signoff templates, PRD Approved v1.0, companion freeze; external PRD checklist at go-live |
 
 ## Review log
 
@@ -29,7 +29,8 @@ Monthly review ritual (P5-3). Record decisions here; detailed incident notes sta
 
 | Date | Reviewer | Open TDs / CD | Actions |
 |------|----------|---------------|---------|
-| 2026-07-06 | Engineering | TD-009, CD-002 | Closed TD-003 (execute_update audit + DatabaseUpdateError); confirmed TD-008 closed P5-1; added governance/phase columns; next review 2026-08-01 |
+| 2026-07-06 | Engineering | TD-009 | Closed TD-003 (execute_update audit + DatabaseUpdateError); confirmed TD-008 closed P5-1; added governance/phase columns; next review 2026-08-01 |
+| 2026-07-07 | Engineering | TD-009 | Closed CD-002 (P6-1/P6-2 sign-off process); PRD Approved v1.0; companion guide forbidden-pattern freeze |
 
 ### Review checklist
 
@@ -43,6 +44,7 @@ Monthly review ritual (P5-3). Record decisions here; detailed incident notes sta
 - [execution-program.md](execution-program.md) — roadmap to close all 12 governance gaps (P3–P6)
 - [governance-matrix.md](governance-matrix.md) — completion percentages
 - [RACI.md](RACI.md)
+- [clinical-signoff-template.md](clinical-signoff-template.md)
 
 ## Closed (P0)
 
