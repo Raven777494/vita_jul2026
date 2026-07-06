@@ -1,5 +1,8 @@
 # troubleshooting_guide.py
 
+from typing import Any, Dict
+
+
 class TroubleshootingGuide:
     """故障排查指南"""
     
@@ -92,7 +95,7 @@ class TroubleshootingGuide:
     }
     
     @staticmethod
-    def diagnose(symptom_key: str) -> Dict:
+    def diagnose(symptom_key: str) -> Dict[str, Any]:
         """診斷問題"""
         if symptom_key in TroubleshootingGuide.ISSUES:
             return TroubleshootingGuide.ISSUES[symptom_key]
