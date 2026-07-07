@@ -52,6 +52,7 @@ pyyaml==6.0.2
 # 測試
 pytest==8.3.3
 pytest-asyncio
+pytest-cov==6.0.0
 
 # LLM 與推理 (HTTP client only; llama-cpp omitted for CI)
 aiohttp==3.14.1

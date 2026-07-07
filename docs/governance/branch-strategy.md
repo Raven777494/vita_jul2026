@@ -1,6 +1,6 @@
 # Branch Strategy
 
-Version: 0.1 (P1)
+Version: 0.2 (B-zone go-live)
 
 ## Branches
 
@@ -30,7 +30,31 @@ Complete sentences; focus on why. Example: `Fix extension bootstrap false OK whe
 
 ## Tags
 
-Release tags `v2.x.y` on `main` after validation.
+Release tags use [Semantic Versioning](https://semver.org/) on **`main`** after validation:
+
+| Pattern | Example | When |
+|---------|---------|------|
+| `vMAJOR.MINOR.PATCH` | `v1.0.0` | Production release on `main` |
+| `vMAJOR.MINOR.PATCH-rc.N` | `v1.0.0-rc.1` | Release candidate on `develop` before merge to `main` |
+| `vMAJOR.MINOR.PATCH-hotfix.N` | `v1.0.1-hotfix.1` | Emergency patch from `main` |
+
+### Release tagging procedure
+
+1. Confirm CI green on target branch (`develop` for RC, `main` for production).
+2. Run master verification from [governance-matrix.md](governance-matrix.md).
+3. Merge release PR (`develop` -> `main`) for production; keep RC tags on `develop` only.
+4. Create annotated tag on the release commit:
+
+```powershell
+git checkout main
+git pull origin main
+git tag -a v1.0.0 -m "VITA 1.0.0 production release"
+git push origin v1.0.0
+```
+
+5. Record tag, commit SHA, and clinical sign-off ID in external release archive (P6-1.4).
+
+**First release candidate:** `v1.0.0-rc.1` on `develop` after B-zone go-live engineering items complete.
 
 ## Protected branch rules (recommended GitHub settings)
 
@@ -42,3 +66,4 @@ Release tags `v2.x.y` on `main` after validation.
 
 - [repo-bootstrap.md](repo-bootstrap.md) — P3-1 full git adoption and GitHub remote setup
 - [execution-program.md](execution-program.md) — governance roadmap P3–P6
+- [go-live-checklist.md](go-live-checklist.md) — pre-production gate

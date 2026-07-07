@@ -14,7 +14,7 @@ Governance: [#12 Technical debt](../governance/execution-program.md#p5-3-technic
 | TD-006 | docker-compose dev secrets in YAML | Medium | P1 | Closed P2-B | #4 | P2 | Secrets moved to `config/.env.compose`; compose uses `${VAR}` only; deploy.yml skeleton |
 | TD-007 | Dependency CVE tracking (pip-audit CI gate) | Medium | P1 | Closed P1 | #6 | P1 | Green gate via fastapi 0.135.0 / starlette 1.3.1 / python-jose 3.5.0 |
 | TD-008 | Monitoring dashboards not codified | Low | P2 | Closed P5-1 | #9 | P5 | Grafana crisis/SLO dashboards + VM scrape + alert routing + verify_p5_monitoring.py |
-| TD-009 | Deploy CD host registry optional | Low | P3 | Q3 2026 | #8 | P3 | GHA build+smoke; SSH image stream; registry push optional follow-up |
+| TD-009 | Deploy CD host registry optional | Low | P3 | Closed B-go-live | #8 | P3 | Accepted: SSH image stream is primary deploy path (`deploy.yml`); optional container registry push deferred post-go-live (see deploy.md) |
 
 ## Clinical debt (linked)
 
@@ -31,6 +31,7 @@ Monthly review ritual (P5-3). Record decisions here; detailed incident notes sta
 |------|----------|---------------|---------|
 | 2026-07-06 | Engineering | TD-009 | Closed TD-003 (execute_update audit + DatabaseUpdateError); confirmed TD-008 closed P5-1; added governance/phase columns; next review 2026-08-01 |
 | 2026-07-07 | Engineering | TD-009 | Closed CD-002 (P6-1/P6-2 sign-off process); PRD Approved v1.0; companion guide forbidden-pattern freeze |
+| 2026-07-08 | Engineering | — | Closed TD-009 (SSH stream deploy accepted primary); B-zone: erasure API, SLO labels, coverage gate, release tag policy |
 
 ### Review checklist
 

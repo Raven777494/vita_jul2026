@@ -19,9 +19,11 @@ Version: 0.2 (P4-1)
 
 See [retention-policy.md](retention-policy.md).
 
-## User erasure design (P4-1)
+## User erasure (P4-1 / B-zone)
 
-Planned API: `DELETE /user/{id}` (implementation target P4/P5). Design-only at P4-1.
+Implemented API: `DELETE /user/{id}` (`app/services/user_erasure.py`, `app/main.py`).
+
+Requires admin credentials (`X-API-KEY` or Bearer token matching `API_KEY`).
 
 ### Preconditions
 

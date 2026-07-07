@@ -94,6 +94,9 @@ jobs:
       - name: Run security tests (P4-2)
         run: python -m pytest tests/security/ -q --tb=short
 
+      - name: Verify critical path coverage gate (clinical/safety >= 70%)
+        run: python scripts/governance/check_critical_coverage.py
+
       - name: Run system alignment checker
         run: python app/tests/system_alignment_checker.py
 

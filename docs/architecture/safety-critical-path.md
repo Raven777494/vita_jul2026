@@ -43,16 +43,29 @@ flowchart TD
 
 ## Code map
 
-| Step | Module |
-|------|--------|
-| User-facing gate | `app/clinical/user_facing_gate.py` |
-| Policy / forbidden patterns | `app/clinical/companion_language_policy.py` |
-| Orchestrator finalize | `app/orchestrator.py` `_finalize_turn_outcome` |
-| Orchestrator fallbacks | `app/orchestrator.py` `_get_safe_reply` |
-| Crisis hub | `app/services/emotional_safety_hub.py` |
-| Navigator fallbacks | `app/services/fracture_map/intelligent_navigator.py` |
-| Internal risk / n8n (not chat) | `app/services/safety_service.py` |
-| Config defaults | `app/config.py` `DEFAULT_SAFE_REPLIES` |
+| Step | Module | SLO |
+|------|--------|-----|
+| User-facing gate | `app/clinical/user_facing_gate.py` | SLO-4 (interception via gate blocks) |
+| Policy / forbidden patterns | `app/clinical/companion_language_policy.py` | SLO-4 |
+| Orchestrator finalize | `app/orchestrator.py` `_finalize_turn_outcome` | SLO-2 / SLO-3 (latency by path label) |
+| Orchestrator fallbacks | `app/orchestrator.py` `_get_safe_reply` | SLO-3 (crisis fast track) |
+| Crisis hub | `app/services/emotional_safety_hub.py` | SLO-3 / SLO-4 |
+| Navigator fallbacks | `app/services/fracture_map/intelligent_navigator.py` | SLO-3 |
+| Internal risk / n8n (not chat) | `app/services/safety_service.py` | SLO-1 (availability of ops path) |
+| Config defaults | `app/config.py` `DEFAULT_SAFE_REPLIES` | — |
+| Chat latency metrics | `app/metrics/chat_latency_metrics.py` | SLO-2 / SLO-3 |
+| Crisis counters | `app/metrics/crisis_metrics.py` | SLO-4 |
+
+## End-to-end SLO map (crisis path)
+
+| Stage | Path layer | SLO ID | Target | Measurement |
+|-------|------------|--------|--------|-------------|
+| Input risk scoring | Orchestrator / hub | SLO-3 | p95 < 5s | `vita_chat_processing_seconds{path="crisis"}` |
+| Companion output gate | User-facing gate + policy | SLO-4 | interception >= 95% | `vita_crisis_interception_rate` |
+| Internal escalation | private/crisis logs + notifier | SLO-1 | ops path available | health + webhook drill |
+| Normal chat latency | Orchestrator normal path | SLO-2 | p95 < 3s | `vita_chat_processing_seconds{path="normal"}` |
+
+See [../operations/slo.md](../operations/slo.md) for alert thresholds and review cadence.
 
 ## Verification
 

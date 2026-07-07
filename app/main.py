@@ -27,6 +27,7 @@ from app.startup_checks import run_startup_checks
 from app.middleware.request_logger import log_requests_middleware
 from app.middleware.rate_limiter import rate_limit_middleware, rate_limiter
 from app.utils.language_switcher import LanguageSwitcher
+from app.utils.security import get_current_user
 from app.utils.llm_health import probe_llm_service
 from app.engines import collect_three_engine_health
 from hardware_profile_loader import get_profile_summary, get_llm_compute_health
@@ -1092,6 +1093,57 @@ async def set_language_preference(
     except Exception as e:
         logger.error(f"[LANG_PREF] Set failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to set language preference")
+
+
+@app_instance.delete("/user/{user_id}", tags=["user"])
+async def delete_user_data(
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Hard-delete user and cascaded data per data-classification.md."""
+    from app.services.user_erasure import (
+        UserErasureError,
+        UserNotFoundError,
+        erase_user,
+    )
+
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin credentials required for user erasure",
+        )
+
+    try:
+        if not user_id or not str(user_id).strip():
+            raise HTTPException(status_code=400, detail="Invalid user_id")
+
+        result = erase_user(db_manager, user_id, redis_client=redis_client)
+        return JSONResponse(
+            {
+                "status": "erased",
+                "request_id": result.request_id,
+                "user_id_hash": result.user_id_hash,
+                "deleted_rows": result.deleted,
+                "redis_keys_removed": result.redis_keys_removed,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    except UserNotFoundError:
+        raise HTTPException(status_code=404, detail="User not found")
+    except UserErasureError as exc:
+        from app.services.user_erasure import hash_user_id
+
+        logger.error(
+            "[ERASURE] Failed user_id_hash=%s: %s",
+            hash_user_id(user_id),
+            exc,
+        )
+        raise HTTPException(status_code=500, detail="User erasure failed")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[ERASURE] Unexpected failure: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="User erasure failed")
 
 
 # ==================== Worker 統計端點 ====================

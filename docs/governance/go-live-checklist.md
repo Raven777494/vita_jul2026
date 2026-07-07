@@ -1,8 +1,8 @@
 # VITA Go-Live 前剩餘勾選清單
 
-Version: 1.0  
-Date: 2026-07-07  
-Baseline: develop `7381c56`（P0–P6 工程交付完成）  
+Version: 1.1 (B-zone complete)  
+Date: 2026-07-08  
+Baseline: develop（B-zone engineering items）  
 權威來源: [execution-program.md](execution-program.md) exit criteria、[governance-matrix.md](governance-matrix.md)、[RACI.md](RACI.md)  
 用途: 列出「repo 工程已完成、但 go-live 前仍須完成」之營運與組織項目，逐項標記 **Accountable（A）** 負責角色。
 
@@ -27,7 +27,7 @@ Baseline: develop `7381c56`（P0–P6 工程交付完成）
 |---|------|--------|-----------|----------|-------------|------|
 | 0.1 | 填入外部 roster（PO/ENG/CLIN/OPS 實名 + 聯絡） | 11 | PO | ENG | RACI 外部欄位 `OPS-ROSTER-001`；`RACI.md` 指向該 ID | 未完成 |
 | 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | 分支保護規則截圖 / 設定紀錄 | 未完成 |
-| 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + 首個 tag | 未完成 |
+| 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + 首個 tag | **完成** — `v1.0.0-rc.1` 政策 |
 
 ---
 
@@ -39,7 +39,7 @@ Baseline: develop `7381c56`（P0–P6 工程交付完成）
 | 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | build-and-smoke job 綠 | 未完成 |
 | 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | deploy-host job 綠 + smoke pass | 未完成 |
 | 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | `deploy.md` 附錄真實 `DEP-DRILL-2026-07-NNN`（含 run URL） | 未完成 |
-| 1.5 | 關閉或展延 TD-009（deploy host registry） | 12 | PO | ENG | `tech-debt-register.md` 更新（關閉或帶到期日 waiver） | 開啟中 |
+| 1.5 | 關閉或展延 TD-009（deploy host registry） | 12 | PO | ENG | `tech-debt-register.md` 更新（關閉或帶到期日 waiver） | **完成** — Closed B-go-live |
 
 ---
 
@@ -69,7 +69,7 @@ Baseline: develop `7381c56`（P0–P6 工程交付完成）
 |---|------|--------|-----------|----------|-------------|------|
 | 4.1 | Staging 金鑰輪替演練並記錄 | 4 | ENG | OPS | `key-rotation-runbook.md` 執行記錄 | 未完成 |
 | 4.2 | Retention 排程營運 dry-run 記錄 | 3 | ENG | OPS | `retention_batch.py` + pg_cron dry-run 記錄 | 未完成 |
-| 4.3 | `DELETE /user/{id}` 抹除 API（依資料分級 cascade） | 3 | ENG | ENG | API 實作 + 測試（可列 go-live 後里程碑） | 未完成 |
+| 4.3 | `DELETE /user/{id}` 抹除 API（依資料分級 cascade） | 3 | ENG | ENG | API 實作 + 測試 | **完成** — `user_erasure.py` + tests |
 
 ---
 
@@ -78,7 +78,7 @@ Baseline: develop `7381c56`（P0–P6 工程交付完成）
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
 | 5.1 | 生產 / staging p95 延遲基線量測，寫回 `slo.md` | 5 | ENG | ENG | `slo.md` 補實測 baseline | 未完成 |
-| 5.2 | 危機路徑 SLO 標籤（全鏈路） | 2 / 5 | ENG | ENG | safety-critical-path 標註 SLO | 未完成 |
+| 5.2 | 危機路徑 SLO 標籤（全鏈路） | 2 / 5 | ENG | ENG | safety-critical-path 標註 SLO | **完成** |
 
 ---
 
@@ -95,7 +95,7 @@ Baseline: develop `7381c56`（P0–P6 工程交付完成）
 
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
-| 7.1 | 關鍵路徑覆蓋率門檻（clinical / safety） | 6 | ENG | ENG | CI coverage gate | 未完成 |
+| 7.1 | 關鍵路徑覆蓋率門檻（clinical / safety） | 6 | ENG | ENG | CI coverage gate | **完成** — `app/clinical` >= 70% + SC/hub functional tests |
 
 ---
 
@@ -112,7 +112,7 @@ Baseline: develop `7381c56`（P0–P6 工程交付完成）
 
 **可帶 waiver 進 production（非阻斷，需 PO 核准並登記到期日）：**
 
-- 1.5（TD-009）、4.3（抹除 API）、5.x（p95 / SLO 標籤）、7.1（覆蓋率門檻）
+- 5.1（生產 p95 基線量測 — staging/生產量測待補）
 
 ---
 
