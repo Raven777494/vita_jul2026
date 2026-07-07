@@ -52,6 +52,9 @@ jobs:
       - name: Verify deploy secrets contract (names only, no values in repo)
         run: python scripts/governance/verify_deploy_secrets_contract.py
 
+      - name: Verify D-zone deploy deliverables (workflow, scripts, runbook)
+        run: python scripts/governance/verify_deploy_d_zone.py
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

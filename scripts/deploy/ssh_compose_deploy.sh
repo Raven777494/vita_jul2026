@@ -41,11 +41,12 @@ set -euo pipefail
 cd "${DEPLOY_PATH}"
 export VITA_API_IMAGE="${IMAGE_TAG}"
 docker tag "${IMAGE_TAG}" vita-api:latest
+docker compose --env-file config/.env.compose build postgres
 docker compose \
   --env-file config/.env.compose \
   -f docker-compose.yml \
   -f docker-compose.smoke.yml \
-  up -d postgres redis vita-api --no-build
+  up -d postgres redis vita-api --no-build --wait
 bash scripts/deploy/smoke_check.sh
 EOF
 

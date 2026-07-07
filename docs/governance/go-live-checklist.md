@@ -1,8 +1,8 @@
 # VITA Go-Live 前剩餘勾選清單
 
-Version: 1.2 (C-zone engineering complete)  
+Version: 1.3 (D-zone engineering complete)  
 Date: 2026-07-08  
-Baseline: develop（C-zone repo verification + GitHub setup runbook）  
+Baseline: develop（D-zone deploy runbook + workflow fixes; tag `v1.0.0-rc.2`）  
 權威來源: [execution-program.md](execution-program.md) exit criteria、[governance-matrix.md](governance-matrix.md)、[RACI.md](RACI.md)  
 用途: 列出「repo 工程已完成、但 go-live 前仍須完成」之營運與組織項目，逐項標記 **Accountable（A）** 負責角色。
 
@@ -27,7 +27,7 @@ Baseline: develop（C-zone repo verification + GitHub setup runbook）
 |---|------|--------|-----------|----------|-------------|------|
 | 0.1 | 填入外部 roster（PO/ENG/CLIN/OPS 實名 + 聯絡） | 11 | PO | ENG | RACI 外部欄位 `OPS-ROSTER-001`；`RACI.md` 指向該 ID | 未完成 |
 | 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C1 + 外部 BP-RECORD | **部分** — repo 驗證就緒；GitHub UI 待 ENG |
-| 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + 首個 tag | **完成** — `v1.0.0-rc.1` 政策 |
+| 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + RC tags | **完成** — `v1.0.0-rc.1` / `v1.0.0-rc.2` |
 
 ---
 
@@ -36,9 +36,9 @@ Baseline: develop（C-zone repo verification + GitHub setup runbook）
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
 | 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C2 + SEC-RECORD | **部分** — 契約驗證在 CI；密鑰值待 GitHub UI |
-| 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | build-and-smoke job 綠 | 未完成 |
-| 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | deploy-host job 綠 + smoke pass | 未完成 |
-| 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | `deploy.md` 附錄真實 `DEP-DRILL-2026-07-NNN`（含 run URL） | 未完成 |
+| 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D1 + run URL | **部分** — runbook + CI 驗證就緒；GHA 實跑待 OPS |
+| 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D2 + smoke pass | **部分** — host bootstrap 文件化；實跑待 OPS |
+| 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D3 + `DEP-DRILL-*` | **部分** — `rollback.sh` 就緒；外部記錄待 OPS |
 | 1.5 | 關閉或展延 TD-009（deploy host registry） | 12 | PO | ENG | `tech-debt-register.md` 更新（關閉或帶到期日 waiver） | **完成** — Closed B-go-live |
 
 ---
@@ -47,10 +47,10 @@ Baseline: develop（C-zone repo verification + GitHub setup runbook）
 
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
-| 2.1 | Staging Grafana / VictoriaMetrics / vita-api `/metrics` 持續 UP | 9 | OPS | ENG | scrape targets UP 截圖 / 記錄 | 未完成 |
-| 2.2 | 臨床告警 fire test（注入 missed log 觸發） | 9 | OPS | ENG | 告警觸發截圖 + LogsQL 結果 | 未完成 |
-| 2.3 | Escalation webhook live drill（非 dry-run） | 9 / 10 | OPS | ENG | `drill_escalation_webhook.py` 送達通道證明 | 未完成 |
-| 2.4 | steady-state：missed-interception 7 日 = 0 | 9 | OPS | ENG | `verify_p5_monitoring.py` staging 記錄 | 未完成 |
+| 2.1 | Staging Grafana / VictoriaMetrics / vita-api `/metrics` 持續 UP | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + scrape UP 記錄 | **部分** — runbook 就緒；staging live 待 OPS |
+| 2.2 | 臨床告警 fire test（注入 missed log 觸發） | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + 告警截圖 | **部分** — 程序在 monitoring.md；fire test 待 OPS |
+| 2.3 | Escalation webhook live drill（非 dry-run） | 9 / 10 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + 送達證明 | **部分** — drill 腳本就緒；live 待 OPS |
+| 2.4 | steady-state：missed-interception 7 日 = 0 | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + `verify_p5_monitoring.py` 7 日記錄 | **部分** — 驗證腳本就緒；7 日記錄待 OPS |
 
 ---
 
@@ -138,4 +138,5 @@ Baseline: develop（C-zone repo verification + GitHub setup runbook）
 - [tech-debt-register.md](tech-debt-register.md) — TD/CD 登記（TD-009 開）
 - [../operations/deploy.md](../operations/deploy.md) — 部署與 rollback 演練
 - [../operations/github-setup-c-zone.md](../operations/github-setup-c-zone.md) — branch protection + Encrypted Secrets（C-zone）
+- [../operations/deploy-d-zone.md](../operations/deploy-d-zone.md) — staging deploy + monitoring drills（D-zone）
 - [prd-v1-clinical-approval-checklist.md](prd-v1-clinical-approval-checklist.md) — PRD 臨床簽核

@@ -8,6 +8,7 @@
 #
 # Verified actions used:
 #   - actions/checkout@v4
+#   - actions/setup-python@v5
 #
 # Configure secrets: docs/operations/deploy.md
 
@@ -43,6 +44,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Prepare compose env for smoke
         env:
@@ -112,6 +118,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Materialize compose env from GitHub Secrets
         env:

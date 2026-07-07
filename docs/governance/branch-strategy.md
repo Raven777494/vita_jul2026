@@ -54,7 +54,19 @@ git push origin v1.0.0
 
 5. Record tag, commit SHA, and clinical sign-off ID in external release archive (P6-1.4).
 
-**First release candidate:** `v1.0.0-rc.1` on `develop` after B-zone go-live engineering items complete.
+**First release candidates:**
+
+| Tag | Commit context |
+|-----|----------------|
+| `v1.0.0-rc.1` | B-zone go-live engineering complete |
+| `v1.0.0-rc.2` | C-zone CI green (branch protection + secrets verification) |
+
+Create RC tags on `develop` after CI green:
+
+```powershell
+git tag -a v1.0.0-rc.2 -m "VITA 1.0.0-rc.2 — C-zone CI green"
+git push origin v1.0.0-rc.2
+```
 
 ## Protected branch rules (recommended GitHub settings)
 
@@ -75,3 +87,4 @@ Configure per [github-setup-c-zone.md](../operations/github-setup-c-zone.md) (C-
 - [execution-program.md](execution-program.md) — governance roadmap P3–P6
 - [go-live-checklist.md](go-live-checklist.md) — pre-production gate
 - [github-setup-c-zone.md](../operations/github-setup-c-zone.md) — branch protection + Encrypted Secrets
+- [deploy-d-zone.md](../operations/deploy-d-zone.md) — staging deploy + monitoring drills

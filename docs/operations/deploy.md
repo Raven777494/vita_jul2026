@@ -92,8 +92,11 @@ Workflow: `.github/workflows/deploy.yml`
 Only official `actions/*` with pinned tags:
 
 - `actions/checkout@v4`
+- `actions/setup-python@v5` (before `write_compose_env.py` steps)
 
 No third-party Marketplace actions. No secret literals in YAML.
+
+Staging deploy runbook: [deploy-d-zone.md](deploy-d-zone.md).
 
 ### Required repository / environment secrets
 
