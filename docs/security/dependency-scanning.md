@@ -59,8 +59,15 @@ python scripts/security/pip_audit_check.py --strict
 | GHSA-mf9w-mj56-hr94 | python-dotenv 1.2.1 | Upgraded to 1.2.2 |
 | GHSA-jr27-m4p2-rc6r | pyasn1 0.4.8 (via python-jose) | python-jose 3.5.0 + pyasn1 0.6.3 |
 | PYSEC-2026-161/248/249, GHSA-wqp7-x3pw-xc5r, GHSA-x746-7m8f-x49c | starlette 0.52.1 | fastapi 0.135.0 + starlette 1.3.1 |
+| PYSEC-2024-1325 / CVE-2024-23342 | ecdsa 0.19.2 (via python-jose) | Removed unused `python-jose` + `pyasn1` from requirements (2026-07-08); VITA auth uses HS256 API key only |
 
-## Exception template
+## Active exceptions
+
+| Advisory | Package | Reason deferred | Expiry | Compensating control |
+|----------|---------|-----------------|--------|---------------------|
+| (none) | — | — | — | — |
+
+## Exception template (historical)
 
 | Advisory | Package | Reason deferred | Expiry | Compensating control |
 |----------|---------|-----------------|--------|---------------------|

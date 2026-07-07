@@ -12,7 +12,7 @@ Governance: [#12 Technical debt](../governance/execution-program.md#p5-3-technic
 | TD-004 | LLM prompt injection hardening | High | P1 | Closed P4-2 | #4 | P4 | Input sanitizer + audit metadata; red-team SC-006..010; see docs/security/prompt-injection-mitigations.md |
 | TD-005 | Notification hook stub | Medium | P2 | Closed P4-2 | #10 | P4 | `app/services/escalation_notifier.py`; `ESCALATION_WEBHOOK_URL` from env |
 | TD-006 | docker-compose dev secrets in YAML | Medium | P1 | Closed P2-B | #4 | P2 | Secrets moved to `config/.env.compose`; compose uses `${VAR}` only; deploy.yml skeleton |
-| TD-007 | Dependency CVE tracking (pip-audit CI gate) | Medium | P1 | Closed P1 | #6 | P1 | Green gate via fastapi 0.135.0 / starlette 1.3.1 / python-jose 3.5.0 |
+| TD-007 | Dependency CVE tracking (pip-audit CI gate) | Medium | P1 | Closed P1 | #6 | P1 | Green gate via fastapi 0.135.0 / starlette 1.3.1; removed unused python-jose (ecdsa CVE-2024-23342) |
 | TD-008 | Monitoring dashboards not codified | Low | P2 | Closed P5-1 | #9 | P5 | Grafana crisis/SLO dashboards + VM scrape + alert routing + verify_p5_monitoring.py |
 | TD-009 | Deploy CD host registry optional | Low | P3 | Closed B-go-live | #8 | P3 | Accepted: SSH image stream is primary deploy path (`deploy.yml`); optional container registry push deferred post-go-live (see deploy.md) |
 
