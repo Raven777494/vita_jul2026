@@ -37,6 +37,26 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _database_url_inputs_present() -> bool:
+    user = os.getenv("DB_USER") or os.getenv("POSTGRES_USER")
+    password = os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
+    host = os.getenv("DB_HOST")
+    port = os.getenv("DB_PORT")
+    name = os.getenv("DB_NAME") or os.getenv("POSTGRES_DB")
+    return bool(user and password and host and port and name)
+
+
+def _is_required_key_satisfied(key: str, *, require_all: bool) -> bool:
+    value = os.getenv(key)
+    if value not in (None, ""):
+        return True
+    if not require_all:
+        return False
+    if key == "DATABASE_URL":
+        return _database_url_inputs_present()
+    return False
+
+
 def write_compose_env(
     target: Path,
     *,
@@ -52,7 +72,7 @@ def write_compose_env(
     for key in _ENV_KEYS:
         value = os.getenv(key)
         if value is None or value == "":
-            if require_all:
+            if require_all and not _is_required_key_satisfied(key, require_all=require_all):
                 missing.append(key)
             continue
         lines.append(f"{key}={value}")

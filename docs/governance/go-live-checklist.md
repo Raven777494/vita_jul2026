@@ -1,8 +1,8 @@
 # VITA Go-Live 前剩餘勾選清單
 
-Version: 1.3 (D-zone engineering complete)  
+Version: 1.4 (D1 GHA smoke complete)  
 Date: 2026-07-08  
-Baseline: develop（D-zone deploy runbook + workflow fixes; tag `v1.0.0-rc.2`）  
+Baseline: develop @ `c6888b6`（Deploy #8 D1 綠燈；tag `v1.0.0-rc.3`）  
 權威來源: [execution-program.md](execution-program.md) exit criteria、[governance-matrix.md](governance-matrix.md)、[RACI.md](RACI.md)  
 用途: 列出「repo 工程已完成、但 go-live 前仍須完成」之營運與組織項目，逐項標記 **Accountable（A）** 負責角色。
 
@@ -27,7 +27,7 @@ Baseline: develop（D-zone deploy runbook + workflow fixes; tag `v1.0.0-rc.2`）
 |---|------|--------|-----------|----------|-------------|------|
 | 0.1 | 填入外部 roster（PO/ENG/CLIN/OPS 實名 + 聯絡） | 11 | PO | ENG | RACI 外部欄位 `OPS-ROSTER-001`；`RACI.md` 指向該 ID | 未完成 |
 | 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C1 + 外部 BP-RECORD | **部分** — repo 驗證就緒；GitHub UI 待 ENG |
-| 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + RC tags | **完成** — `v1.0.0-rc.1` / `v1.0.0-rc.2` |
+| 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + RC tags | **完成** — `v1.0.0-rc.1` / `rc.2` / `rc.3` |
 
 ---
 
@@ -36,7 +36,7 @@ Baseline: develop（D-zone deploy runbook + workflow fixes; tag `v1.0.0-rc.2`）
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
 | 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C2 + SEC-RECORD | **部分** — 契約驗證在 CI；密鑰值待 GitHub UI |
-| 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D1 + run URL | **部分** — runbook + CI 驗證就緒；GHA 實跑待 OPS |
+| 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D1 + run URL | **完成** — Deploy #8 @ `c6888b6`（build-and-smoke 綠；deploy-host 跳過） |
 | 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D2 + smoke pass | **部分** — host bootstrap 文件化；實跑待 OPS |
 | 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D3 + `DEP-DRILL-*` | **部分** — `rollback.sh` 就緒；外部記錄待 OPS |
 | 1.5 | 關閉或展延 TD-009（deploy host registry） | 12 | PO | ENG | `tech-debt-register.md` 更新（關閉或帶到期日 waiver） | **完成** — Closed B-go-live |

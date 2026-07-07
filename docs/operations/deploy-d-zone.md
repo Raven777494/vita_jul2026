@@ -74,6 +74,8 @@ Host requirements:
 | deploy-host job | skipped (`dry_run=true`) |
 | Record ID | DEP-DRILL-YYYY-MM-NNN (step 1 of drill) |
 
+**Completed example (2026-07-08):** Deploy workflow run **#8** on `develop` @ `c6888b6` — build-and-smoke 2m 1s green; deploy-host skipped.
+
 Update [go-live-checklist.md](../governance/go-live-checklist.md) item **1.2** when complete.
 
 ---

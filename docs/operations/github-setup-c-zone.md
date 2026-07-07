@@ -147,6 +147,113 @@ Update [go-live-checklist.md](../governance/go-live-checklist.md) item **1.1** w
 
 ---
 
+## C2 step-by-step verification checklist
+
+Use this when configuring secrets before **D2** (`dry_run=false`).  
+Repo-side name contract (no values): `python scripts/governance/verify_deploy_secrets_contract.py`
+
+**Important:** D1 (`dry_run=true`) does **not** need these secrets — it uses `config/.env.compose.ci`.  
+Deploy #7 failed because `dry_run=false` was selected without secrets configured.
+
+### Step 0 — Choose secret scope
+
+| Scope | Where | When to use |
+|-------|-------|-------------|
+| **Recommended** | Settings -> Environments -> **staging** | D2 staging deploy (`deploy.yml` reads `environment: staging`) |
+| Optional fallback | Settings -> Secrets and variables -> Actions -> **Repository secrets** | Only if not using environment-scoped secrets |
+
+Create environment **staging** first:
+
+1. GitHub repo -> **Settings**
+2. **Environments** -> **New environment** -> name: `staging`
+3. (Optional) Add required reviewers: ENG
+
+### Step 1 — Compose secrets (17 names, required for D2)
+
+Add each secret under **staging** environment (or repository secrets).  
+Check off in GitHub UI as you add each name.
+
+| # | Secret name | Example / constraint | Required for D2 |
+|---|-------------|----------------------|-----------------|
+| 1 | `POSTGRES_USER` | `postgres` | Yes |
+| 2 | `POSTGRES_PASSWORD` | strong random (>= 16 chars) | Yes |
+| 3 | `POSTGRES_DB` | `vita_db` | Yes |
+| 4 | `DB_USER` | same as `POSTGRES_USER` | Yes |
+| 5 | `DB_PASSWORD` | same as `POSTGRES_PASSWORD` or app-specific | Yes |
+| 6 | `DB_HOST` | `postgres` (compose service name) | Yes |
+| 7 | `DB_PORT` | `5432` | Yes |
+| 8 | `DB_NAME` | same as `POSTGRES_DB` | Yes |
+| 9 | `DATABASE_URL` | `postgresql+psycopg2://user:pass@postgres:5432/vita_db` **or omit** if rows 4–8 set | Optional* |
+| 10 | `GRAFANA_ADMIN_PASSWORD` | strong random | Yes |
+| 11 | `N8N_BASIC_AUTH_USER` | non-default (not `admin` in production) | Yes |
+| 12 | `N8N_BASIC_AUTH_PASSWORD` | strong random | Yes |
+| 13 | `N8N_ENCRYPTION_KEY` | **>= 32 characters** | Yes |
+| 14 | `JWT_SECRET` | **>= 32 chars**, must not start with `dev_` | Yes |
+| 15 | `ENCRYPT_KEY` | strong random | Yes |
+| 16 | `SECRET_KEY` | strong random | Yes |
+| 17 | `API_KEY` | **>= 32 chars**, must not start with `dev_` | Yes |
+
+\* `write_compose_env.py --require-all` auto-builds `DATABASE_URL` when DB parts (rows 4–8) are present.
+
+Generate values locally (paste into GitHub UI only — never commit):
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+### Step 2 — Host deploy secrets (4 names, required for D2 deploy-host job)
+
+| # | Secret name | Format | Required for D2 |
+|---|-------------|--------|-----------------|
+| 18 | `DEPLOY_HOST` | staging server hostname or IP | Yes |
+| 19 | `DEPLOY_KEY` | full SSH private key PEM (`-----BEGIN ... KEY-----`) | Yes |
+| 20 | `DEPLOY_USER` | SSH user (default `deploy` if omitted in workflow) | Recommended |
+| 21 | `DEPLOY_PATH` | repo path on host (default `/opt/vita`) | Recommended |
+
+Host must have git checkout at `DEPLOY_PATH` (see [deploy-d-zone.md](deploy-d-zone.md) bootstrap).
+
+### Step 3 — Verify in GitHub UI
+
+1. Settings -> Environments -> **staging** -> Environment secrets
+2. Confirm **21 secret names** exist (or 20 if skipping optional `DEPLOY_USER` / `DEPLOY_PATH` — workflow defaults apply)
+3. Confirm names match **exactly** (case-sensitive, underscores)
+
+### Step 4 — Verify from repo (names only)
+
+```powershell
+python scripts/governance/verify_deploy_secrets_contract.py
+python scripts/security/scan_secrets.py
+```
+
+Both must print `[OK]`.
+
+### Step 5 — Functional verify (D2 dry run on GHA)
+
+Only after Steps 1–4:
+
+1. Actions -> Deploy -> Run workflow
+2. Branch: `develop`
+3. `environment` = **staging**
+4. **Uncheck** Runner smoke only (`dry_run=false`)
+5. Expected: **Build and smoke** green, then **Deploy to host** green
+
+If Step 5 fails with `Missing required environment variables`, return to Step 1 — a compose secret name is missing or empty in the **staging** environment (not repository-level only).
+
+### Step 6 — External acceptance record
+
+| Field | Value |
+|-------|-------|
+| Record ID | SEC-RECORD-2026-07-NNN |
+| Date | |
+| Scope | staging environment secrets |
+| Count | 17 compose + 4 host (or 21 total) |
+| Verified by | ENG / OPS |
+| D2 run URL | (after Step 5 green) |
+
+Mark [go-live-checklist.md](../governance/go-live-checklist.md) item **1.1** complete when Step 6 is filed.
+
+---
+
 ## Optional: `gh` CLI (after install)
 
 ```powershell

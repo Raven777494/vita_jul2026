@@ -247,3 +247,19 @@ Confirm smoke passes after rollback.
 | Rollback tag | previous local tag |
 | Rollback smoke result | pass |
 | Notes | Full GHA staging run pending `DEPLOY_HOST` secrets |
+
+### Example (GHA D1 smoke — 2026-07-08)
+
+| Field | Value |
+|-------|-------|
+| Drill ID | DEP-DRILL-2026-07-002 |
+| Date (UTC) | 2026-07-08 |
+| Operator | OPS / ENG |
+| Environment | staging (GHA runner, `dry_run=true`) |
+| Deploy workflow run URL | Deploy workflow run #8 on `develop` |
+| Image tag deployed | `vita-api:c6888b6` |
+| Smoke result | pass |
+| Rollback performed | n/a (D1 stage) |
+| Rollback tag | n/a |
+| Rollback smoke result | n/a |
+| Notes | deploy-host skipped; RC tag `v1.0.0-rc.3` on `c6888b6` |

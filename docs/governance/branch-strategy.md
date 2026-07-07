@@ -60,12 +60,13 @@ git push origin v1.0.0
 |-----|----------------|
 | `v1.0.0-rc.1` | B-zone go-live engineering complete |
 | `v1.0.0-rc.2` | C-zone CI green (branch protection + secrets verification) |
+| `v1.0.0-rc.3` | D1 GHA smoke green (Deploy #8 @ `c6888b6`) |
 
 Create RC tags on `develop` after CI green:
 
 ```powershell
-git tag -a v1.0.0-rc.2 -m "VITA 1.0.0-rc.2 — C-zone CI green"
-git push origin v1.0.0-rc.2
+git tag -a v1.0.0-rc.3 -m "VITA 1.0.0-rc.3 — D1 GHA smoke green"
+git push origin v1.0.0-rc.3
 ```
 
 ## Protected branch rules (recommended GitHub settings)
