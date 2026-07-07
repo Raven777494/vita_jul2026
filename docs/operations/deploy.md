@@ -97,7 +97,9 @@ No third-party Marketplace actions. No secret literals in YAML.
 
 ### Required repository / environment secrets
 
-Configure under **Settings -> Secrets and variables -> Actions** (or per-environment secrets):
+Configure under **Settings -> Secrets and variables -> Actions** (or per-environment secrets).
+
+Full step-by-step: [github-setup-c-zone.md](github-setup-c-zone.md) section **C2**.
 
 | Secret | Purpose |
 |--------|---------|

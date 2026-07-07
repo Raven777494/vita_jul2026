@@ -73,13 +73,8 @@ python scripts/security/pip_audit_check.py --strict
 |----------|---------|-----------------|--------|---------------------|
 | (example) | urllib3 | Transitive via X; no fix on 3.11 yet | 2026-09-01 | Network isolation |
 
-## Scope
-
-- Scanned in CI: `requirements-audit.txt`
-- Full runtime: `requirements.txt` (manual/supply-chain review for excluded packages)
-- Not scanned: vendored `llama-cpp-python/`, `node_modules/`
-
 ## Related files
 
 - `requirements-dev.txt` — pip-audit pin
 - `scripts/security/pip_audit_check.py` — CI entrypoint
+- `docs/operations/github-setup-c-zone.md` — branch protection + secrets (C-zone)

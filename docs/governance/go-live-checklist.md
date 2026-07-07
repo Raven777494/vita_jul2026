@@ -1,8 +1,8 @@
 # VITA Go-Live 前剩餘勾選清單
 
-Version: 1.1 (B-zone complete)  
+Version: 1.2 (C-zone engineering complete)  
 Date: 2026-07-08  
-Baseline: develop（B-zone engineering items）  
+Baseline: develop（C-zone repo verification + GitHub setup runbook）  
 權威來源: [execution-program.md](execution-program.md) exit criteria、[governance-matrix.md](governance-matrix.md)、[RACI.md](RACI.md)  
 用途: 列出「repo 工程已完成、但 go-live 前仍須完成」之營運與組織項目，逐項標記 **Accountable（A）** 負責角色。
 
@@ -26,7 +26,7 @@ Baseline: develop（B-zone engineering items）
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
 | 0.1 | 填入外部 roster（PO/ENG/CLIN/OPS 實名 + 聯絡） | 11 | PO | ENG | RACI 外部欄位 `OPS-ROSTER-001`；`RACI.md` 指向該 ID | 未完成 |
-| 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | 分支保護規則截圖 / 設定紀錄 | 未完成 |
+| 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C1 + 外部 BP-RECORD | **部分** — repo 驗證就緒；GitHub UI 待 ENG |
 | 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + 首個 tag | **完成** — `v1.0.0-rc.1` 政策 |
 
 ---
@@ -35,7 +35,7 @@ Baseline: develop（B-zone engineering items）
 
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
-| 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | Secrets 已建立；名稱對齊 `deploy.yml` | 未完成 |
+| 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C2 + SEC-RECORD | **部分** — 契約驗證在 CI；密鑰值待 GitHub UI |
 | 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | build-and-smoke job 綠 | 未完成 |
 | 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | deploy-host job 綠 + smoke pass | 未完成 |
 | 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | `deploy.md` 附錄真實 `DEP-DRILL-2026-07-NNN`（含 run URL） | 未完成 |
@@ -137,4 +137,5 @@ Baseline: develop（B-zone engineering items）
 - [RACI.md](RACI.md) — 角色與外部 roster
 - [tech-debt-register.md](tech-debt-register.md) — TD/CD 登記（TD-009 開）
 - [../operations/deploy.md](../operations/deploy.md) — 部署與 rollback 演練
+- [../operations/github-setup-c-zone.md](../operations/github-setup-c-zone.md) — branch protection + Encrypted Secrets（C-zone）
 - [prd-v1-clinical-approval-checklist.md](prd-v1-clinical-approval-checklist.md) — PRD 臨床簽核

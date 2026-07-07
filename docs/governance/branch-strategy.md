@@ -58,12 +58,20 @@ git push origin v1.0.0
 
 ## Protected branch rules (recommended GitHub settings)
 
+Configure per [github-setup-c-zone.md](../operations/github-setup-c-zone.md) (C-zone go-live **0.2**).
+
+| Branch | Required checks |
+|--------|-----------------|
+| `main` | `test-and-alignment`, `dependency-audit` |
+| `develop` | `test-and-alignment`, `dependency-audit` |
+
 - Require PR before merge
-- Require status checks: `test-and-alignment`, `dependency-audit`
-- No force push to `main`
+- No force push
+- Include administrators (recommended)
 
 ## Related
 
 - [repo-bootstrap.md](repo-bootstrap.md) — P3-1 full git adoption and GitHub remote setup
 - [execution-program.md](execution-program.md) — governance roadmap P3–P6
 - [go-live-checklist.md](go-live-checklist.md) — pre-production gate
+- [github-setup-c-zone.md](../operations/github-setup-c-zone.md) — branch protection + Encrypted Secrets

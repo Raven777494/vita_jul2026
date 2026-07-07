@@ -46,6 +46,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify GitHub Actions security policy (Verified Creator, pinned tags)
+        run: python scripts/governance/verify_github_workflows.py
+
+      - name: Verify deploy secrets contract (names only, no values in repo)
+        run: python scripts/governance/verify_deploy_secrets_contract.py
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
