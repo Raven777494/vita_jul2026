@@ -25,4 +25,5 @@ def test_rollback_ps1_wrapper_exists() -> None:
     assert ps1.is_file()
     text = ps1.read_text(encoding="utf-8")
     assert "PREVIOUS_IMAGE_TAG" in text
+    assert "bash -c" in text
     assert "rollback.sh" in text

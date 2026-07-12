@@ -317,6 +317,7 @@ python scripts/observability/drill_escalation_webhook.py --dry-run
 | Smoke timeout on host | Stack not ready | Check `docker compose ps`; increase `SMOKE_MAX_WAIT_SEC` |
 | Rollback image missing | Tag not loaded on host | `docker tag vita-api:local vita-api:<sha>` before rollback |
 | Rollback uses wrong image | `VITA_API_IMAGE` still set in shell | `Remove-Item Env:\VITA_API_IMAGE` then re-run rollback |
+| `rollback.ps1` ignores `-PreviousImageTag` | WSL bash does not inherit PowerShell `$env:` | Fixed: `rollback.ps1` passes tag via `bash -c export ...` |
 | Smoke fails immediately after rollback | vita-api not healthy yet | Fixed: `rollback.sh` uses `--wait`; increase `SMOKE_MAX_WAIT_SEC` |
 
 ---
