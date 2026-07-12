@@ -1,8 +1,8 @@
 # VITA Go-Live 前剩餘勾選清單
 
-Version: 1.5 (HSS 2.2 fire test complete)  
+Version: 1.6 (HSS D3 rollback drill complete)  
 Date: 2026-07-12  
-Baseline: develop @ `07512b1`（HSS `D:\vita` 監控 live + 2.2 LogsQL fire test）  
+Baseline: develop @ `9012c91`（HSS D3 rollback + 2.1/2.2 fire test）  
 權威來源: [execution-program.md](execution-program.md) exit criteria、[governance-matrix.md](governance-matrix.md)、[RACI.md](RACI.md)  
 用途: 列出「repo 工程已完成、但 go-live 前仍須完成」之營運與組織項目，逐項標記 **Accountable（A）** 負責角色。
 
@@ -38,7 +38,7 @@ Baseline: develop @ `07512b1`（HSS `D:\vita` 監控 live + 2.2 LogsQL fire test
 | 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C2 + SEC-RECORD | **部分** — 契約驗證在 CI；密鑰值待 GitHub UI |
 | 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D1 + run URL | **完成** — Deploy #8 @ `c6888b6`（build-and-smoke 綠；deploy-host 跳過） |
 | 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D2 + smoke pass | **部分** — host bootstrap 文件化；實跑待 OPS |
-| 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D3 + `DEP-DRILL-*` | **部分** — `rollback.sh` 就緒；外部記錄待 OPS |
+| 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D3 + `DEP-DRILL-*` | **完成** — `DEP-DRILL-2026-07-003` HSS local；`latest` -> `drill-before` smoke pass |
 | 1.5 | 關閉或展延 TD-009（deploy host registry） | 12 | PO | ENG | `tech-debt-register.md` 更新（關閉或帶到期日 waiver） | **完成** — Closed B-go-live |
 
 ---

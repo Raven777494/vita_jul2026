@@ -176,12 +176,21 @@ Copy-Item config\.env.compose config\.env.compose.backup -Force
 **Step 5 — Execute rollback**
 
 ```powershell
+# PowerShell (preferred on HSS)
+.\scripts\deploy\rollback.ps1 -PreviousImageTag drill-before
+```
+
+Or manually:
+
+```powershell
 # PowerShell
 $env:PREVIOUS_IMAGE_TAG = "drill-before"
 # Clear stale override if set from earlier smoke sessions
 Remove-Item Env:\VITA_API_IMAGE -ErrorAction SilentlyContinue
 bash scripts/deploy/rollback.sh
 ```
+
+Do **not** use CMD `set` + manual `docker tag` only — that skips backup restore and script validation.
 
 Git Bash alternative:
 

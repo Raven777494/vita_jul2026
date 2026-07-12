@@ -279,3 +279,19 @@ Confirm smoke passes after rollback.
 | LogsQL result | `missed=1` in 15m window (VMUI screenshot) |
 | Grafana alert fired | n/a — VM rate rule not triggered by log inject alone |
 | Notes | Checklist 2.2 complete; steady-state recovers after 15m window |
+
+### Example (HSS D3 rollback drill — 2026-07-12)
+
+| Field | Value |
+|-------|-------|
+| Drill ID | DEP-DRILL-2026-07-003 |
+| Date (UTC) | 2026-07-12 |
+| Operator | Owner (HSS local) |
+| Environment | HSS `D:\vita` |
+| Deploy workflow run URL | n/a — local image tag drill |
+| Image tag deployed | `vita-api:drill-after` (`621f6495ecc9`) |
+| Smoke result (deploy) | pass |
+| Rollback performed | yes |
+| Rollback tag | `drill-before` (`b3c26840c28b`) |
+| Rollback smoke result | pass |
+| Notes | `latest` restored to `drill-before`; run `rollback.ps1` or `rollback.sh` after pull `9012c91` for script-path validation |
