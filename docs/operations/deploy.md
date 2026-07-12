@@ -263,3 +263,16 @@ Confirm smoke passes after rollback.
 | Rollback tag | n/a |
 | Rollback smoke result | n/a |
 | Notes | deploy-host skipped; RC tag `v1.0.0-rc.3` on `c6888b6` |
+
+### Example (HSS companion safety fire test — 2026-07-12)
+
+| Field | Value |
+|-------|-------|
+| Drill ID | FIRE-DRILL-2026-07-001 |
+| Date (UTC) | 2026-07-12 |
+| Operator | Owner (single-operator companion mode) |
+| Environment | HSS `D:\vita` |
+| Inject method | VictoriaLogs `/insert/jsonline` (`logger=vita.crisis.drill`) |
+| LogsQL result | `missed=1` in 15m window (VMUI screenshot) |
+| Grafana alert fired | n/a — VM rate rule not triggered by log inject alone |
+| Notes | Checklist 2.2 complete; steady-state recovers after 15m window |
