@@ -169,8 +169,11 @@ Steps performed:
 
 1. Restore `config/.env.compose.backup` if present.
 2. Retag / pull `vita-api:${PREVIOUS_IMAGE_TAG}` as `vita-api:latest`.
-3. `docker compose up -d vita-api --no-build`.
-4. Run smoke checks.
+3. Set `VITA_API_IMAGE=vita-api:latest` (clears stale shell override).
+4. `docker compose up -d vita-api --no-build --wait`.
+5. Run smoke checks.
+
+HSS local drill: [deploy-d-zone.md](deploy-d-zone.md) section **D3-A**.
 
 ## Docker image notes
 

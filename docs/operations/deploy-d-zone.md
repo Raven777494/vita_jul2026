@@ -121,7 +121,107 @@ Remote deploy script backs up `config/.env.compose` to `.env.compose.backup` bef
 **Executor (R):** ENG  
 **Goal:** Restore previous `vita-api` image after a failed or superseded deploy.
 
-On the **deploy host** (after D2 succeeded at least once):
+### D3-A — HSS local drill (no GHA; checklist 1.4)
+
+Use when HSS is already live at `D:\vita` (or Linux `${DEPLOY_PATH}`) without D2 GHA deploy.
+
+**Prerequisites**
+
+- `config/.env.compose` exists (not `.env.compose.ci` for monitoring stack)
+- `postgres` + `redis` healthy (`docker compose ps`)
+- `bash` available (`C:\Windows\System32\bash.exe` on Windows)
+- Two local image tags to simulate before/after deploy
+
+**Step 0 — Sync repo (engine7b -> HSS)**
+
+```powershell
+# After pulling develop in D:\Desktop\engine7b, copy or git pull in D:\vita
+cd D:\vita
+git pull origin develop
+```
+
+**Step 1 — Ensure monitoring stack up**
+
+```powershell
+cd D:\vita
+docker compose --env-file config\.env.compose up -d postgres redis vita-api
+docker compose --env-file config\.env.compose ps
+```
+
+**Step 2 — Create drill image tags (simulate deploy versions)**
+
+```powershell
+# Tag current known-good image as "before"
+docker tag vita-api:local vita-api:drill-before
+
+# Simulate a new deploy build (or retag for drill-only)
+docker build -t vita-api:drill-after .
+# Drill-only shortcut (same layers): docker tag vita-api:local vita-api:drill-after
+```
+
+**Step 3 — Simulate superseding deploy (switch to drill-after)**
+
+```powershell
+docker tag vita-api:drill-after vita-api:latest
+docker compose --env-file config\.env.compose up -d vita-api --no-build --wait
+bash scripts/deploy/smoke_check.sh
+```
+
+**Step 4 — Backup compose env (simulates D2 remote backup)**
+
+```powershell
+Copy-Item config\.env.compose config\.env.compose.backup -Force
+```
+
+**Step 5 — Execute rollback**
+
+```powershell
+# PowerShell
+$env:PREVIOUS_IMAGE_TAG = "drill-before"
+# Clear stale override if set from earlier smoke sessions
+Remove-Item Env:\VITA_API_IMAGE -ErrorAction SilentlyContinue
+bash scripts/deploy/rollback.sh
+```
+
+Git Bash alternative:
+
+```bash
+export PREVIOUS_IMAGE_TAG=drill-before
+unset VITA_API_IMAGE
+bash scripts/deploy/rollback.sh
+```
+
+**Expected output**
+
+```
+[ROLLBACK] Tagging vita-api:drill-before as vita-api:latest
+[ROLLBACK] Recreating vita-api via compose
+[SMOKE] Health endpoint reachable ...
+[OK] Smoke checks passed ...
+[OK] Rollback complete (vita-api -> drill-before)
+```
+
+**Step 6 — Verify image tag**
+
+```powershell
+docker inspect vita-api --format "{{.Config.Image}}"
+docker images vita-api
+```
+
+**Step 7 — External record (checklist 1.4)**
+
+| Field | Example |
+|-------|---------|
+| Drill ID | DEP-DRILL-2026-07-003 |
+| Environment | HSS `D:\vita` local |
+| Deploy workflow run URL | n/a (local drill) |
+| Image tag deployed | `vita-api:drill-after` |
+| Rollback tag | `drill-before` |
+| Rollback smoke result | pass |
+
+### D3-B — Post-D2 rollback (GHA deploy host)
+
+On the **deploy host** after D2 succeeded at least once:
 
 ```bash
 cd "${DEPLOY_PATH:-/opt/vita}"
@@ -133,8 +233,17 @@ bash scripts/deploy/rollback.sh
 
 1. Restores `config/.env.compose.backup` if present
 2. Retags `vita-api:${PREVIOUS_IMAGE_TAG}` as `vita-api:latest`
-3. Recreates `vita-api` via compose
-4. Runs `smoke_check.sh`
+3. Sets `VITA_API_IMAGE=vita-api:latest` (avoids stale shell override)
+4. Recreates `vita-api` via compose with `--wait`
+5. Runs `smoke_check.sh`
+
+Smoke-stack hosts only: pass extra compose file:
+
+```bash
+export COMPOSE_EXTRA_FILES="-f docker-compose.smoke.yml"
+export PREVIOUS_IMAGE_TAG=<sha>
+bash scripts/deploy/rollback.sh
+```
 
 ### Drill record template
 
@@ -197,7 +306,9 @@ python scripts/observability/drill_escalation_webhook.py --dry-run
 | `python: command not found` in deploy job | Missing setup-python | Fixed in deploy.yml (`actions/setup-python@v5` before python steps) |
 | Remote postgres fails on fresh host | Image not built | `ssh_compose_deploy.sh` runs `docker compose build postgres` |
 | Smoke timeout on host | Stack not ready | Check `docker compose ps`; increase `SMOKE_MAX_WAIT_SEC` |
-| Rollback image missing | Tag not loaded on host | Re-run D2 with known-good SHA or `docker load` |
+| Rollback image missing | Tag not loaded on host | `docker tag vita-api:local vita-api:<sha>` before rollback |
+| Rollback uses wrong image | `VITA_API_IMAGE` still set in shell | `Remove-Item Env:\VITA_API_IMAGE` then re-run rollback |
+| Smoke fails immediately after rollback | vita-api not healthy yet | Fixed: `rollback.sh` uses `--wait`; increase `SMOKE_MAX_WAIT_SEC` |
 
 ---
 
