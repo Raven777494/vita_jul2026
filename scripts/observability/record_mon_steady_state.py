@@ -22,11 +22,18 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from scripts.observability.verify_p5_monitoring import run_verification
-
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _import_run_verification():
+    root = _project_root()
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from scripts.observability.verify_p5_monitoring import run_verification
+
+    return run_verification
 
 
 def _default_record_path() -> Path:
@@ -133,6 +140,7 @@ def record_daily_steady_state(
     skip_grafana: bool,
     skip_vm: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    run_verification = _import_run_verification()
     report = run_verification(
         api_metrics_url=api_metrics_url,
         vm_base=vm_url,
