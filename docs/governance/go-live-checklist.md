@@ -50,7 +50,7 @@ Baseline: develop @ `9012c91`（HSS D3 rollback + 2.1/2.2 fire test）
 | 2.1 | Staging Grafana / VictoriaMetrics / vita-api `/metrics` 持續 UP | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + scrape UP 記錄 | **完成** — HSS `D:\vita`；`verify_p5_monitoring.py` 全綠（2026-07-11） |
 | 2.2 | 臨床告警 fire test（注入 missed log 觸發） | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + 告警截圖 | **完成** — `FIRE-DRILL-2026-07-001`；VMUI LogsQL `missed=1`（2026-07-12） |
 | 2.3 | Escalation webhook live drill（非 dry-run） | 9 / 10 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + 送達證明 | **部分** — drill 腳本就緒；live 待 OPS |
-| 2.4 | steady-state：missed-interception 7 日 = 0 | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + `verify_p5_monitoring.py` 7 日記錄 | **部分** — 驗證腳本就緒；7 日記錄待 OPS |
+| 2.4 | steady-state：missed-interception 7 日 = 0 | 9 | OPS | ENG | [mon-steady-state-7d.md](../operations/mon-steady-state-7d.md) + `record_mon_steady_state.py` 7 日記錄 | **部分** — 記錄腳本就緒；Day 0/7 待 OPS 每日執行 |
 
 ---
 

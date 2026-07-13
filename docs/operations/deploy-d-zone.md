@@ -298,7 +298,27 @@ python scripts/observability/verify_p5_monitoring.py
 | **2.1** Grafana / VM / `/metrics` UP | `verify_p5_monitoring.py` all checks green | scrape targets UP screenshot |
 | **2.2** Clinical alert fire test | Inject missed interception log per [monitoring.md](monitoring.md) | alert firing screenshot + LogsQL |
 | **2.3** Escalation webhook live | `python scripts/observability/drill_escalation_webhook.py` (non dry-run) | delivery proof to configured channel |
-| **2.4** Steady-state 7 days | `verify_p5_monitoring.py` steady-state over 7 days | external MON-RECORD |
+| **2.4** Steady-state 7 days | Daily `record_mon_steady_state.py` (see D4-A) | external MON-RECORD JSONL |
+
+### D4-A — 7-day steady-state record (go-live 2.4)
+
+Full runbook: [mon-steady-state-7d.md](mon-steady-state-7d.md)
+
+Once per calendar day on staging (HSS `D:\vita`):
+
+```powershell
+cd D:\vita
+python scripts/observability/record_mon_steady_state.py
+```
+
+- Appends one line per UTC day to `logs/mon-steady-state-record.jsonl` (gitignored).
+- Gate: **7 consecutive** calendar days with steady-state `missed=0`.
+- Do not run on days with active fire-drill inject (wait 15m after drill).
+- Archive JSONL to external ops storage as `MON-RECORD-YYYY-MM-NNN` when `gate_met=true`.
+
+```powershell
+python scripts/observability/record_mon_steady_state.py --json
+```
 
 Dry-run webhook (safe pre-check):
 
@@ -327,4 +347,5 @@ python scripts/observability/drill_escalation_webhook.py --dry-run
 - [deploy.md](deploy.md) — workflow reference and rollback appendix
 - [github-setup-c-zone.md](github-setup-c-zone.md) — secrets and branch protection
 - [monitoring.md](monitoring.md) — Grafana, alerts, steady-state
+- [mon-steady-state-7d.md](mon-steady-state-7d.md) — 7-day MON record (2.4)
 - [branch-strategy.md](../governance/branch-strategy.md) — `v1.0.0-rc.2` tagging policy
