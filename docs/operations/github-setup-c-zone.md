@@ -222,10 +222,15 @@ Host must have git checkout at `DEPLOY_PATH` (see [deploy-d-zone.md](deploy-d-zo
 
 ```powershell
 python scripts/governance/verify_deploy_secrets_contract.py
+python scripts/governance/verify_staging_secrets_presence.py
 python scripts/security/scan_secrets.py
 ```
 
-Both must print `[OK]`.
+`verify_staging_secrets_presence.py` requires authenticated `gh` CLI; it checks **names only**, never values.
+`DATABASE_URL` is **optional** when `DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_PORT`/`DB_NAME` (or `POSTGRES_*` equivalents) are present — matches `write_compose_env.py --require-all`.
+If `gh` is unavailable, use the printed manual checklist (exit code 2).
+
+Both contract verifiers must print `[OK]`.
 
 ### Step 5 — Functional verify (D2 dry run on GHA)
 

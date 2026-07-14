@@ -26,3 +26,11 @@ def test_ssh_compose_deploy_builds_postgres() -> None:
     script = (root / "scripts/deploy/ssh_compose_deploy.sh").read_text(encoding="utf-8")
     assert "build postgres" in script
     assert "--wait" in script
+
+
+def test_hss_local_deploy_script_references() -> None:
+    root = Path(__file__).resolve().parents[2]
+    script = (root / "scripts/deploy/hss_local_deploy.ps1").read_text(encoding="utf-8")
+    assert "smoke_check.sh" in script
+    assert ".env.compose.backup" in script
+    assert "git pull" in script

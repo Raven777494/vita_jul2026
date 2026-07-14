@@ -104,7 +104,7 @@ curl -fsS http://127.0.0.1:8080/metrics | grep vita_crisis
 
 Remote deploy script backs up `config/.env.compose` to `.env.compose.backup` before replace (rollback support).
 
-### Acceptance
+### Acceptance (GHA D2)
 
 | Field | Value |
 |-------|-------|
@@ -112,6 +112,63 @@ Remote deploy script backs up `config/.env.compose` to `.env.compose.backup` bef
 | Jobs required green | `Build and smoke`, `Deploy to host` |
 | Image tag | `vita-api:<github.sha>` |
 | Smoke | pass on host |
+
+### D2-B — HSS local deploy (go-live 1.3, solo-operator)
+
+Use when staging is **local HSS** (`D:\vita`) and GHA SSH deploy is not configured.
+Acceptance equivalent to D2 for checklist **1.3** when documented as D2-B.
+
+**Prerequisites**
+
+- `config/.env.compose` exists on HSS (not `.env.compose.ci`)
+- Docker Desktop running
+- `bash` available (Git Bash / WSL)
+
+**Steps**
+
+```powershell
+cd D:\vita
+.\scripts\deploy\hss_local_deploy.ps1 -IncludeMonitoring
+```
+
+Optional flags:
+
+| Flag | Purpose |
+|------|---------|
+| `-SkipPull` | Skip `git pull` (already synced) |
+| `-SkipBuild` | Reuse existing images |
+| `-ImageTag local` | Tag built image as `vita-api:local` |
+| `-IncludeMonitoring` | Also start victorialogs, vmsingle, grafana |
+
+**Expected**
+
+```
+[DEPLOY] git pull origin develop
+[DEPLOY] backed up config\.env.compose
+[DEPLOY] docker compose build postgres
+[DEPLOY] docker build vita-api:latest
+[DEPLOY] docker compose up -d postgres, redis, vita-api, ...
+[SMOKE] Health endpoint reachable ...
+[OK] Smoke checks passed ...
+[OK] HSS local deploy complete (vita-api:latest @ <sha>)
+```
+
+Post-deploy verify:
+
+```powershell
+python scripts/observability/verify_p5_monitoring.py
+```
+
+**Acceptance record**
+
+| Field | Value |
+|-------|-------|
+| Checklist item | 1.3 (D2-B path) |
+| Record ID | DEP-DRILL-YYYY-MM-NNN |
+| Commit SHA | from script output |
+| Smoke | `[OK] Smoke checks passed` |
+
+GHA D2 (`dry_run=false`) remains optional when SSH host deploy is configured per C2.
 
 ---
 

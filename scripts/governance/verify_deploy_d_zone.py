@@ -20,9 +20,12 @@ from pathlib import Path
 REQUIRED_SCRIPTS = (
     "scripts/deploy/smoke_check.sh",
     "scripts/deploy/rollback.sh",
+    "scripts/deploy/rollback.ps1",
     "scripts/deploy/ssh_compose_deploy.sh",
+    "scripts/deploy/hss_local_deploy.ps1",
     "scripts/deploy/write_compose_env.py",
     "scripts/observability/verify_p5_monitoring.py",
+    "scripts/observability/record_mon_steady_state.py",
     "scripts/observability/drill_escalation_webhook.py",
 )
 
@@ -102,8 +105,11 @@ def verify_runbook(content: str) -> list[str]:
     required = (
         "D1",
         "D2",
+        "D2-B",
         "D3",
+        "D3-A",
         "D4",
+        "D4-A",
         "1.2",
         "1.3",
         "1.4",
@@ -113,7 +119,10 @@ def verify_runbook(content: str) -> list[str]:
         "2.4",
         "dry_run=true",
         "dry_run=false",
+        "hss_local_deploy.ps1",
+        "record_mon_steady_state.py",
         "rollback.sh",
+        "rollback.ps1",
         "verify_p5_monitoring.py",
         "drill_escalation_webhook.py",
         "DEP-DRILL-",

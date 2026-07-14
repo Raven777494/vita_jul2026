@@ -35,9 +35,9 @@ Baseline: develop @ `9012c91`（HSS D3 rollback + 2.1/2.2 fire test）
 
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
-| 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C2 + SEC-RECORD | **部分** — 契約驗證在 CI；密鑰值待 GitHub UI |
+| 1.1 | 設定 GitHub Encrypted Secrets（DB/JWT/ENCRYPT/API + `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_PATH`/`DEPLOY_KEY`） | 8 | ENG | OPS | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C2 + `verify_staging_secrets_presence.py` + SEC-RECORD | **完成** — staging 20/20 required names；`DATABASE_URL` waived（2026-07-14） |
 | 1.2 | deploy workflow `environment=staging`, `dry_run=true` | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D1 + run URL | **完成** — Deploy #8 @ `c6888b6`（build-and-smoke 綠；deploy-host 跳過） |
-| 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D2 + smoke pass | **部分** — host bootstrap 文件化；實跑待 OPS |
+| 1.3 | deploy workflow `dry_run=false`（staging 真部署） | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D2 或 **D2-B** `hss_local_deploy.ps1` + smoke pass | **部分** — D2-B 腳本就緒；HSS 手動部署已 live；GHA D2 可選 |
 | 1.4 | Rollback 演練並記錄 | 8 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D3 + `DEP-DRILL-*` | **完成** — `DEP-DRILL-2026-07-003` HSS local；`latest` -> `drill-before` smoke pass |
 | 1.5 | 關閉或展延 TD-009（deploy host registry） | 12 | PO | ENG | `tech-debt-register.md` 更新（關閉或帶到期日 waiver） | **完成** — Closed B-go-live |
 
@@ -50,7 +50,7 @@ Baseline: develop @ `9012c91`（HSS D3 rollback + 2.1/2.2 fire test）
 | 2.1 | Staging Grafana / VictoriaMetrics / vita-api `/metrics` 持續 UP | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + scrape UP 記錄 | **完成** — HSS `D:\vita`；`verify_p5_monitoring.py` 全綠（2026-07-11） |
 | 2.2 | 臨床告警 fire test（注入 missed log 觸發） | 9 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + 告警截圖 | **完成** — `FIRE-DRILL-2026-07-001`；VMUI LogsQL `missed=1`（2026-07-12） |
 | 2.3 | Escalation webhook live drill（非 dry-run） | 9 / 10 | OPS | ENG | [deploy-d-zone.md](../operations/deploy-d-zone.md) D4 + 送達證明 | **部分** — drill 腳本就緒；live 待 OPS |
-| 2.4 | steady-state：missed-interception 7 日 = 0 | 9 | OPS | ENG | [mon-steady-state-7d.md](../operations/mon-steady-state-7d.md) + `record_mon_steady_state.py` 7 日記錄 | **部分** — 記錄腳本就緒；Day 0/7 待 OPS 每日執行 |
+| 2.4 | steady-state：missed-interception 7 日 = 0 | 9 | OPS | ENG | [mon-steady-state-7d.md](../operations/mon-steady-state-7d.md) + `record_mon_steady_state.py` 7 日記錄 | **部分** — Day 1/7 通過（2026-07-13）；連續 6 日待 OPS |
 
 ---
 
