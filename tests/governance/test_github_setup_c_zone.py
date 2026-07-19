@@ -25,4 +25,9 @@ def test_verify_github_workflows_scripts_exist() -> None:
     root = Path(__file__).resolve().parents[2]
     assert (root / "scripts/governance/verify_github_workflows.py").is_file()
     assert (root / "scripts/governance/verify_deploy_secrets_contract.py").is_file()
+    assert (root / "scripts/governance/verify_branch_protection.py").is_file()
+    assert (root / "scripts/governance/apply_branch_protection.py").is_file()
     assert (root / "docs/operations/github-setup-c-zone.md").is_file()
+    assert "Verified Creator" in (root / "docs/operations/github-setup-c-zone.md").read_text(
+        encoding="utf-8"
+    )

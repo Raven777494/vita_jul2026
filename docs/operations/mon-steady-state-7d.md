@@ -32,12 +32,20 @@ cd D:\vita
 python scripts/observability/record_mon_steady_state.py
 ```
 
-Optional custom record path (external ops drive):
+Optional custom record path (local `_ops_archive`, gitignored):
 
 ```powershell
 python scripts/observability/record_mon_steady_state.py `
-  --record-file "D:\ops\MON-RECORD-2026-07.jsonl" `
+  --record-file "_ops_archive\MON-RECORD-2026-07.jsonl" `
   --environment "HSS D:\vita"
+```
+
+Or archive after the fact:
+
+```powershell
+.\scripts\ops\archive_ops_record.ps1 `
+  -Source "logs\mon-steady-state-record.jsonl" `
+  -Name "MON-RECORD-2026-07-001.jsonl"
 ```
 
 JSON output:
@@ -88,8 +96,9 @@ Summary fields (`--json`):
 
 ## External archive (checklist evidence)
 
-Copy `logs/mon-steady-state-record.jsonl` (or `--record-file` path) to encrypted
-ops storage as `MON-RECORD-2026-07-NNN`.
+Copy `logs/mon-steady-state-record.jsonl` (or `--record-file` path) to
+`_ops_archive/MON-RECORD-YYYY-MM-NNN.jsonl` (gitignored). Do **not** use a
+non-existent `D:\ops` path unless you create that directory yourself.
 
 Template line (one per day):
 

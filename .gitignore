@@ -72,6 +72,8 @@ htmlcov/
 
 # Logs
 logs/
+_ops_archive/
+_local_backup/
 *.log
 
 # Database
