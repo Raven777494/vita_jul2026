@@ -64,7 +64,8 @@ Expected in steady-state: `missed` = 0.
 | Symptom | Command | Expected |
 |---------|---------|----------|
 | L4–5 not notifying | `python scripts/observability/drill_escalation_webhook.py --dry-run` | `[OK] Log backend delivered` |
-| Webhook drill | `python scripts/observability/drill_escalation_webhook.py` | `[OK] Webhook delivered` when `ESCALATION_WEBHOOK_URL` set |
+| Webhook drill | `python scripts/observability/drill_escalation_webhook.py` | `[OK] Escalation drill complete` when URL set |
+| Solo HSS webhook | `python scripts/observability/drill_escalation_webhook.py --local-capture` | Proof JSONL `ok=true` |
 
 ## Clinical / companion language
 

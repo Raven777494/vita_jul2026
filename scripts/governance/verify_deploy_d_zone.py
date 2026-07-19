@@ -29,6 +29,12 @@ REQUIRED_SCRIPTS = (
     "scripts/observability/drill_escalation_webhook.py",
 )
 
+REQUIRED_DOCS = (
+    "docs/operations/deploy-d-zone.md",
+    "docs/operations/mon-steady-state-7d.md",
+    "docs/operations/escalation-webhook-drill.md",
+)
+
 REQUIRED_COMPOSE = (
     "docker-compose.yml",
     "docker-compose.smoke.yml",
@@ -110,6 +116,7 @@ def verify_runbook(content: str) -> list[str]:
         "D3-A",
         "D4",
         "D4-A",
+        "D4-B",
         "1.2",
         "1.3",
         "1.4",
@@ -121,6 +128,8 @@ def verify_runbook(content: str) -> list[str]:
         "dry_run=false",
         "hss_local_deploy.ps1",
         "record_mon_steady_state.py",
+        "local-capture",
+        "escalation-webhook-drill.md",
         "rollback.sh",
         "rollback.ps1",
         "verify_p5_monitoring.py",
@@ -138,17 +147,16 @@ def verify_contract(root: Path | None = None) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     notes: list[str] = []
 
-    for rel in REQUIRED_SCRIPTS + REQUIRED_COMPOSE:
+    for rel in REQUIRED_SCRIPTS + REQUIRED_COMPOSE + REQUIRED_DOCS:
         if not (root / rel).is_file():
             errors.append(f"missing required file: {rel}")
         else:
             notes.append(f"present: {rel}")
 
-    if not (root / RUNBOOK).is_file():
-        errors.append(f"missing runbook: {RUNBOOK}")
-    else:
-        notes.append(f"present: {RUNBOOK}")
+    if (root / RUNBOOK).is_file():
         errors.extend(verify_runbook(_read(root, RUNBOOK)))
+    else:
+        errors.append(f"missing runbook: {RUNBOOK}")
 
     if not (root / DEPLOY_WORKFLOW).is_file():
         errors.append(f"missing workflow: {DEPLOY_WORKFLOW}")

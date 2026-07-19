@@ -354,7 +354,7 @@ python scripts/observability/verify_p5_monitoring.py
 |------|--------|----------|
 | **2.1** Grafana / VM / `/metrics` UP | `verify_p5_monitoring.py` all checks green | scrape targets UP screenshot |
 | **2.2** Clinical alert fire test | Inject missed interception log per [monitoring.md](monitoring.md) | alert firing screenshot + LogsQL |
-| **2.3** Escalation webhook live | `python scripts/observability/drill_escalation_webhook.py` (non dry-run) | delivery proof to configured channel |
+| **2.3** Escalation webhook live | `drill_escalation_webhook.py` live or `--local-capture` (see D4-B) | `WEBHOOK-DRILL-*` proof JSONL |
 | **2.4** Steady-state 7 days | Daily `record_mon_steady_state.py` (see D4-A) | external MON-RECORD JSONL |
 
 ### D4-A — 7-day steady-state record (go-live 2.4)
@@ -377,11 +377,28 @@ python scripts/observability/record_mon_steady_state.py
 python scripts/observability/record_mon_steady_state.py --json
 ```
 
-Dry-run webhook (safe pre-check):
+### D4-B — Escalation webhook live drill (go-live 2.3)
+
+Full runbook: [escalation-webhook-drill.md](escalation-webhook-drill.md)
+
+**Do not** treat `--dry-run` as 2.3 acceptance.
+
+Solo HSS (local capture proof):
 
 ```powershell
+cd D:\vita
 python scripts/observability/drill_escalation_webhook.py --dry-run
+python scripts/observability/drill_escalation_webhook.py --local-capture
 ```
+
+External channel (optional):
+
+```powershell
+$env:ESCALATION_WEBHOOK_URL = "https://hooks.example.com/..."
+python scripts/observability/drill_escalation_webhook.py
+```
+
+Evidence: `logs/webhook-drill-proof.jsonl` with `ok=true`, archive as `WEBHOOK-DRILL-YYYY-MM-NNN`.
 
 ---
 
@@ -405,4 +422,5 @@ python scripts/observability/drill_escalation_webhook.py --dry-run
 - [github-setup-c-zone.md](github-setup-c-zone.md) — secrets and branch protection
 - [monitoring.md](monitoring.md) — Grafana, alerts, steady-state
 - [mon-steady-state-7d.md](mon-steady-state-7d.md) — 7-day MON record (2.4)
+- [escalation-webhook-drill.md](escalation-webhook-drill.md) — webhook live / local-capture (2.3)
 - [branch-strategy.md](../governance/branch-strategy.md) — `v1.0.0-rc.2` tagging policy

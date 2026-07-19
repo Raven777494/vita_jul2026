@@ -67,6 +67,8 @@ python scripts/observability/drill_escalation_webhook.py
 ```
 
 Expected: log backend OK; webhook OK when `ESCALATION_WEBHOOK_URL` configured.
+Solo HSS: `python scripts/observability/drill_escalation_webhook.py --local-capture`
+Full runbook: [escalation-webhook-drill.md](escalation-webhook-drill.md).
 
 ## Post-incident record (external)
 

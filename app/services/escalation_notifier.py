@@ -13,6 +13,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
 
+import asyncio
+
 logger = logging.getLogger("vita.escalation_notifier")
 
 
@@ -65,21 +67,14 @@ class WebhookEscalationBackend:
         if not self.webhook_url:
             return False
         try:
-            import httpx
-
             from app.utils.audit_logger import audit_log
 
             payload = event.to_webhook_dict(user_id_hash=audit_log._hash_pii(event.user_id))
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(
-                    self.webhook_url,
-                    json=payload,
-                    headers={"Content-Type": "application/json", "User-Agent": "VITA-Escalation/1.0"},
-                )
-            if response.status_code >= 400:
+            status_code = await self._post_json(payload)
+            if status_code >= 400:
                 logger.error(
                     "[ESCALATION] Webhook HTTP %s for session_id=%s",
-                    response.status_code,
+                    status_code,
                     event.session_id,
                 )
                 return False
@@ -92,6 +87,44 @@ class WebhookEscalationBackend:
         except Exception as exc:
             logger.error("[ESCALATION] Webhook failed session_id=%s: %s", event.session_id, exc)
             return False
+
+    async def _post_json(self, payload: dict[str, Any]) -> int:
+        """POST JSON via httpx when available; fall back to urllib for host drills."""
+        try:
+            import httpx
+        except ImportError:
+            return await asyncio.to_thread(self._post_json_urllib, payload)
+
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.post(
+                self.webhook_url,
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "VITA-Escalation/1.0",
+                },
+            )
+            return int(response.status_code)
+
+    def _post_json_urllib(self, payload: dict[str, Any]) -> int:
+        import urllib.error
+        import urllib.request
+
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.webhook_url,
+            data=data,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "VITA-Escalation/1.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                return int(response.status)
+        except urllib.error.HTTPError as exc:
+            return int(exc.code)
 
 
 class EscalationNotifier:
