@@ -144,13 +144,27 @@ class MemoryChainService:
             should_store, echo_score = self.gsw_engine.judge_eternal_echo_generation(
                 response, extracted_info, session_state
             )
-        except Exception:
-            should_store, echo_score = True, 0.35
+        except Exception as judge_exc:
+            # 判斷失敗時預設不落盤，避免把漂移／低顯著內容固化為長期記憶。
+            self.logger.warning({
+                "event": "memory_chain_judge_failed",
+                "user_id": user_id,
+                "session_id": session_id,
+                "error": str(judge_exc),
+            })
+            should_store, echo_score = False, 0.0
 
-        if not should_store:
-            echo_score = max(0.35, float(echo_score or 0.35))
-        else:
-            echo_score = max(0.35, float(echo_score or 0.35))
+        if not should_store and not force:
+            self.logger.info({
+                "event": "memory_chain_persist_skipped",
+                "user_id": user_id,
+                "session_id": session_id,
+                "echo_score": float(echo_score or 0.0),
+                "reason": "judge_should_store_false",
+            })
+            return None
+
+        echo_score = max(0.35, float(echo_score or 0.35))
 
         try:
             echo_id = await self.gsw_engine.generate_and_store_echo(

@@ -226,15 +226,17 @@ class PoliticalFilter:
             return result
 
         except Exception as e:
+            # Fail-safe：分類器故障時不可預設放行。用 tier2/rewrite 觸發降級改寫，
+            # 避免誤用 tier1 把一般故障全變成危機固定句。
             self.logger.error(f"Detection failed: {e}", exc_info=True)
             return {
-                'is_sensitive': False,
-                'category': 'safe',
-                'risk_level': 'safe',
+                'is_sensitive': True,
+                'category': 'unknown',
+                'risk_level': 'tier2',
                 'triggered_keywords': [],
-                'source': 'none',
-                'recommendation': 'allow',
-                'error': str(e)
+                'source': 'detector_error',
+                'recommendation': 'rewrite',
+                'error': str(e),
             }
 
     def _check_text(self, text: str) -> Dict:

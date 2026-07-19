@@ -31,7 +31,7 @@ class IslandFusion:
 
         self.island_triggers = {
             'Mother': {
-                'keywords': ['媽媽', '抱', '陪伴', '溫暖', '愛', '照顧', '寶貝', '心痛'],
+                'keywords': ['抱', '陪伴', '溫暖', '愛', '照顧', '心痛', '喺度'],
                 'user_patterns': ['感到孤單', '需要陪伴', '害怕', '傷心', '無助'],
                 'response_patterns': ['保護', '無條件', '永遠', '陪著你'],
             },
@@ -85,7 +85,7 @@ class IslandFusion:
                 self.logger.warning(f"Failed to load island mapping: {e}")
 
         return {
-            'Mother': ['寶貝', '媽媽', '陪伴', '愛'],
+            'Mother': ['陪伴', '關心', '守住', '安心'],
             'Friend': ['姐妹', '共鳴', '一起'],
             'Empath': ['理解', '傾聽', '療癒'],
             'Self': ['成長', '學會', '相信']
@@ -112,13 +112,17 @@ class IslandFusion:
         """
         self.logger.debug("Calculating island activation...")
 
-        if not response_vector or not isinstance(response_vector, list):
-            self.logger.warning("Invalid response_vector, using balanced activation")
-            activation = {
-                'Mother': 0.25, 'Friend': 0.25,
-                'Empath': 0.25, 'Self': 0.25
-            }
-            return activation, 'Empath'
+        # response_vector 目前不參與打分；空向量時仍應依用戶上下文（關鍵詞/情緒/需求）激活。
+        # 舊行為直接回傳 balanced Empath，會令 draft 前置 / PersonaGraph 永遠落到預設島。
+        if not isinstance(response_vector, list):
+            self.logger.warning(
+                "Invalid response_vector type=%s; scoring from user context only",
+                type(response_vector).__name__,
+            )
+        elif not response_vector:
+            self.logger.debug(
+                "Empty response_vector; scoring from user context only (pre-draft path)"
+            )
 
         try:
             # [FIXED-I1] 初始化激活度
@@ -220,10 +224,13 @@ class IslandFusion:
 
             intimacy = max(0.0, min(1.0, float(intimacy)))
 
-            # 決定親密度等級
-            if intimacy >= 0.7:
+            # 決定親密度等級（避免一開始過度親密）
+            if intimacy >= 0.9:
+                level = 'very_high'
+                prefix = "我想同你講件對我好重要嘅事，"
+            elif intimacy >= 0.75:
                 level = 'high'
-                prefix = "寶貝，"
+                prefix = "我想同你分享，"
             elif intimacy >= 0.4:
                 level = 'medium'
                 prefix = "你知道嗎，"
@@ -256,21 +263,25 @@ class IslandFusion:
         """[FIXED-I2] 應用島嶼編織風格"""
         weaving_map = {
             'Mother': {
-                'high': f"{prefix}那時候…{content}…媽媽都記得。",
+                'very_high': f"{prefix}那時候…{content}…我一直放在心裡。",
+                'high': f"{prefix}那時候…{content}…我都記得。",
                 'medium': f"{prefix}{content}那時，我有多心疼妳。",
                 'low': f"{prefix}{content}"
             },
             'Friend': {
+                'very_high': f"{prefix}咱們一路走來…{content}…我一直記得。",
                 'high': f"{prefix}咱們一起經歷過…{content}…我永遠不會忘。",
                 'medium': f"{prefix}{content}…咱們都很努力。",
                 'low': f"{prefix}{content}"
             },
             'Empath': {
+                'very_high': f"{prefix}我一直都感受到…{content}…妳對我好重要。",
                 'high': f"{prefix}我能感受到…{content}…妳的感受很重要。",
                 'medium': f"{prefix}關於{content}…我能理解妳。",
                 'low': f"{prefix}{content}…妳的感受正當。"
             },
             'Self': {
+                'very_high': f"{prefix}{content}…這段路我一直同自己對話。",
                 'high': f"{prefix}{content}…這就是妳在成長。",
                 'medium': f"{prefix}{content}…妳又長大了。",
                 'low': f"{prefix}{content}…值得妳反思。"
@@ -339,11 +350,37 @@ class IslandFusion:
         return scores
 
     def _calculate_emotion_affinity(self, user_sentiment: Dict) -> Dict[str, float]:
-        """根據情感計算親和度"""
+        """根據情感計算親和度（相容 polarity/intensity 與 VAD valence/arousal）。"""
         scores = {island: 0.0 for island in self.emotion_affinity.keys()}
+        sentiment = user_sentiment if isinstance(user_sentiment, dict) else {}
 
-        polarity = str(user_sentiment.get('polarity', 'neutral')).lower()
-        intensity = max(0.0, min(1.0, abs(user_sentiment.get('intensity', 0))))
+        polarity = str(sentiment.get('polarity', '') or '').lower()
+        try:
+            intensity = abs(float(sentiment.get('intensity', 0) or 0))
+        except (TypeError, ValueError):
+            intensity = 0.0
+
+        # Orchestrator / EmotionService 常只提供 VAD；補推 polarity / intensity。
+        try:
+            valence = float(sentiment.get('valence', 0.5))
+        except (TypeError, ValueError):
+            valence = 0.5
+        try:
+            arousal = float(sentiment.get('arousal', 0.3))
+        except (TypeError, ValueError):
+            arousal = 0.3
+
+        if not polarity:
+            if valence <= 0.35:
+                polarity = 'negative'
+            elif valence >= 0.65:
+                polarity = 'positive'
+            else:
+                polarity = 'neutral'
+        if intensity <= 0.0:
+            intensity = max(0.0, min(1.0, abs(valence - 0.5) * 1.6 + arousal * 0.5))
+
+        intensity = max(0.0, min(1.0, intensity))
 
         if polarity == 'positive':
             scores['Friend'] = 0.9
@@ -359,6 +396,11 @@ class IslandFusion:
 
         else:
             scores = {island: 0.5 for island in scores.keys()}
+
+        # 高喚醒負向時再抬 Empath / Mother
+        if polarity == 'negative' and arousal >= 0.7:
+            scores['Empath'] = min(1.0, scores['Empath'] + 0.15)
+            scores['Mother'] = min(1.0, scores['Mother'] + 0.1)
 
         # 根據強度調整
         for island in scores:

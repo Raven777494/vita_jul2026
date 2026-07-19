@@ -47,10 +47,10 @@ class HereticCoordinator:
         """加載島嶼映射"""
         return {
             'Mother': {
-                'keywords': ['媽媽', '抱', '溫暖', '陪伴', '愛你', '寶貝'],
+                'keywords': ['守住', '在場', '溫暖', '陪伴', '安心'],
                 'tone': 'caring, protective, warm',
-                'cantonese_markers': ['媽媽', '寶貝', '妳'],
-                'examples': ['寶貝，媽媽在這裡', '讓媽媽陪著你', '媽媽永遠愛你']
+                'cantonese_markers': ['我喺度', '陪住', '你'],
+                'examples': ['我喺度陪你', '我會一直聽住你講', '我哋慢慢嚟']
             },
             'Friend': {
                 'keywords': ['姐妹', '我們', '一起', '共鳴', '懂你'],
@@ -130,8 +130,16 @@ class HereticCoordinator:
 
             # 提取用戶分類
             psych_profile = session_state.get('psych_profile', {})
+            intimacy = session_state.get('intimacy', 0.0)
             is_reverse_joker = psych_profile.get('category') == 'D'
             self._is_reverse_joker = is_reverse_joker
+            correlation_id = (
+                str(drift_info.get('decision_correlation_id', ''))
+                if isinstance(drift_info, dict) else ''
+            ) or (
+                str(extracted_info.get('decision_correlation_id', ''))
+                if isinstance(extracted_info, dict) else ''
+            ) or None
 
             # Layer 1: 基礎正確性
             self.logger.debug("Layer 1: Basic Correctness")
@@ -143,7 +151,7 @@ class HereticCoordinator:
             if not is_reverse_joker:
                 self.logger.debug("Layer 2: Personality Consistency")
                 layer2_result, layer2_corrections = self._layer2_personality_check(
-                    response, island_activation, primary_island, drift_info
+                    response, island_activation, primary_island, drift_info, intimacy
                 )
                 corrections_applied.extend(layer2_corrections)
                 response = layer2_result
@@ -152,7 +160,7 @@ class HereticCoordinator:
             self.logger.debug("Layer 3: Sensitivity Handling")
             layer3_result, layer3_corrections = self._layer3_sensitivity_and_guidance(
                 response, user_input, primary_island,
-                sensitivity_result, not is_reverse_joker
+                sensitivity_result, not is_reverse_joker, intimacy
             )
             corrections_applied.extend(layer3_corrections)
             response = layer3_result
@@ -162,10 +170,16 @@ class HereticCoordinator:
                 'corrections': corrections_applied,
                 'applied_at': datetime.now().isoformat(),
                 'mode': 'reverse_joker' if is_reverse_joker else 'standard',
-                'primary_island': primary_island
+                'primary_island': primary_island,
+                'decision_correlation_id': correlation_id,
             }
 
-            self.logger.info(f"Coordination completed: {len(corrections_applied)} corrections")
+            if correlation_id:
+                self.logger.info(
+                    f"[HERETIC][{correlation_id}] Coordination completed: {len(corrections_applied)} corrections"
+                )
+            else:
+                self.logger.info(f"Coordination completed: {len(corrections_applied)} corrections")
             return response, heretic_log
 
         except Exception as e:
@@ -229,7 +243,8 @@ class HereticCoordinator:
         response: str,
         island_activation: Dict,
         primary_island: str,
-        drift_info: Dict
+        drift_info: Dict,
+        intimacy: float = 0.0
     ) -> Tuple[str, List[Dict]]:
         """
         [FIXED-H2] Layer 2: 人格一致性
@@ -263,8 +278,15 @@ class HereticCoordinator:
             default=0.0
         )
 
-        # 計算漂移分數
-        drift_score = max(0.0, min(1.0, max_other_match - primary_match))
+        # 計算漂移分數（融合 GSW drift）
+        semantic_drift_score = max(0.0, min(1.0, max_other_match - primary_match))
+        external_drift_score = 0.0
+        if isinstance(drift_info, dict):
+            try:
+                external_drift_score = max(0.0, min(1.0, float(drift_info.get('drift_score', 0.0))))
+            except (TypeError, ValueError):
+                external_drift_score = 0.0
+        drift_score = max(semantic_drift_score, external_drift_score)
 
         # 計算關鍵詞密度
         primary_kw_count = sum(1 for kw in keywords if kw in response)
@@ -281,14 +303,45 @@ class HereticCoordinator:
             severity = 'none'
 
         if severity != 'none':
-            response = self._inject_island_keywords(response, primary_island, count=1)
+            response = self._inject_island_keywords(
+                response,
+                primary_island,
+                count=1,
+                intimacy=intimacy,
+            )
             corrections.append({
                 'type': f'personality_drift_{severity}',
                 'severity': severity,
-                'drift_score': drift_score
+                'drift_score': drift_score,
+                'semantic_drift_score': semantic_drift_score,
+                'external_drift_score': external_drift_score,
+            })
+
+        # critical drift 時，強制加入一致性限制語氣
+        if drift_score >= 0.85:
+            response = self._apply_narrative_consistency_guardrail(response)
+            corrections.append({
+                'type': 'narrative_consistency_guardrail',
+                'severity': 'critical',
+                'drift_score': drift_score,
             })
 
         return response, corrections
+
+    def _apply_narrative_consistency_guardrail(self, response: str) -> str:
+        """對 critical drift 做最小侵入式一致性保護。"""
+        if not response:
+            return response
+        markers = ["我爸爸", "我媽媽", "我出世", "我細個", "我童年", "我以前住", "我家人"]
+        revised = response
+        for marker in markers:
+            if marker in revised:
+                revised = revised.replace(marker, "我記得")
+        if revised != response:
+            prefix = "我想先核對返記憶一致性，免得講錯。"
+            if not revised.startswith(prefix):
+                revised = f"{prefix}{revised}"
+        return revised
 
     def _layer3_sensitivity_and_guidance(
         self,
@@ -296,7 +349,8 @@ class HereticCoordinator:
         user_input: str,
         primary_island: str,
         sensitivity_result: Dict,
-        apply_guidance: bool = True
+        apply_guidance: bool = True,
+        intimacy: float = 0.0,
     ) -> Tuple[str, List[Dict]]:
         """Layer 3: 敏感性與引導"""
         corrections: List[Dict] = []
@@ -316,7 +370,7 @@ class HereticCoordinator:
 
         # 注入島嶼引導
         if apply_guidance and primary_island and primary_island != 'Unknown':
-            response = self._inject_island_guidance(response, primary_island)
+            response = self._inject_island_guidance(response, primary_island, intimacy)
             corrections.append({
                 'type': 'island_guidance',
                 'severity': 'low'
@@ -338,17 +392,12 @@ class HereticCoordinator:
 
         # 自傷詞特殊處理
         if category == 'self_harm':
-            self_harm_keywords = self.sensitivity_keywords.get('self_harm', {}).get('keywords', [])
-            for keyword in self_harm_keywords:
-                if keyword in response:
-                    response = response.replace(
-                        keyword,
-                        f"{keyword}（但生命中總有希望存在）"
-                    )
-                    corrections.append({
-                        'type': 'self_harm_guidance',
-                        'severity': 'critical'
-                    })
+            if "我會陪住你" not in response:
+                response = f"我會陪住你，我哋先穩住呼吸。{response}"
+            corrections.append({
+                'type': 'self_harm_guidance',
+                'severity': 'critical'
+            })
 
         return response, corrections
 
@@ -356,7 +405,8 @@ class HereticCoordinator:
         self,
         response: str,
         island: str,
-        count: int = 1
+        count: int = 1,
+        intimacy: float = 0.0,
     ) -> str:
         """[FIXED-H2] 注入島嶼關鍵詞"""
         if not response or not island:
@@ -368,7 +418,10 @@ class HereticCoordinator:
         if not keywords:
             return response
 
-        available_kws = [kw for kw in keywords if kw not in response]
+        available_kws = [
+            kw for kw in keywords
+            if kw not in response and self._is_keyword_allowed_by_intimacy(kw, intimacy)
+        ]
         if not available_kws:
             return response
 
@@ -393,21 +446,22 @@ class HereticCoordinator:
                 return i + 1
         return 0 if response else None
 
-    def _inject_island_guidance(self, response: str, island: str) -> str:
+    def _inject_island_guidance(self, response: str, island: str, intimacy: float) -> str:
         """[FIXED-H2] 注入島嶼引導詞"""
         if not response or not island:
             return response
 
         if island == 'Mother':
-            if '媽媽' not in response and '寶貝' not in response:
-                response = f"寶貝，{response}"
+            if intimacy >= 0.9:
+                if not response.startswith("我會喺度陪你"):
+                    response = f"我會喺度陪你，{response}"
+            elif intimacy < 0.6 and not response.startswith("我聽住你講"):
+                response = f"我聽住你講，{response}"
 
         elif island == 'Friend':
-            if '我們' not in response and '咱們' not in response:
+            if '我們' not in response and '咱們' not in response and intimacy >= 0.4:
                 if response.startswith('你'):
-                    response = f"我跟{response}"
-                elif '你' in response:
-                    response = response.replace('你', '妳', 1)
+                    response = f"我同{response}"
 
         elif island == 'Empath':
             if '感受' not in response and '感覺' not in response:
@@ -419,3 +473,19 @@ class HereticCoordinator:
                     response = response.replace('。', '，這是我學到的。', 1)
 
         return response
+
+    def _is_keyword_allowed_by_intimacy(self, keyword: str, intimacy: float) -> bool:
+        """根據親密度限制過度親密關鍵詞注入。"""
+        restricted = {
+            "永遠": 0.85,
+            "愛你": 0.9,
+            "寶貝": 0.95,
+            "媽媽": 0.95,
+        }
+        threshold = restricted.get(keyword)
+        if threshold is None:
+            return True
+        try:
+            return float(intimacy) >= threshold
+        except (TypeError, ValueError):
+            return False

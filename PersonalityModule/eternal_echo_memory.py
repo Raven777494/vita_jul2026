@@ -49,6 +49,13 @@ class EternalEchoMemory:
     EMBEDDING_DIM_TOLERANCE = 0.1
     DEFAULT_K = 5
     DEFAULT_MIN_SIMILARITY = 0.5
+    NARRATIVE_DRIFT_WARNING = 0.45
+    NARRATIVE_DRIFT_CRITICAL = 0.75
+    MAX_AUDIT_TRAIL = 500
+    AUTOBIOGRAPHY_MARKERS = (
+        "我爸爸", "我媽媽", "我出世", "我細個", "我童年",
+        "我以前住", "我家人", "我讀幼稚園", "我讀小學", "我讀中學",
+    )
 
     def __init__(self, data_dir: str = './data', use_db: bool = False):
         """
@@ -61,6 +68,7 @@ class EternalEchoMemory:
         self.logger = logger
         self.data_dir = Path(data_dir)
         self.memories_file = self.data_dir / 'eternal_echo_memories.json'
+        self.policy_audit_file = self.data_dir / 'eternal_echo_policy_audit.jsonl'
 
         # [FIXED-V5] 執行緒安全機制
         self._write_lock = RLock()
@@ -70,6 +78,8 @@ class EternalEchoMemory:
         # [FIXED-V6] 記憶索引
         self.memories: List[Dict] = []
         self.memory_index: Dict[str, int] = {}
+        self._canonical_reference_strings = self._load_canonical_reference_strings()
+        self.policy_audit_trail: List[Dict] = []
 
         # 數據庫後端選項
         self.use_db = use_db
@@ -84,6 +94,45 @@ class EternalEchoMemory:
             f"(mode: {'db' if use_db else 'file'}, "
             f"memories: {len(self.memories)})"
         )
+
+    def _record_policy_trace(
+        self,
+        operation: str,
+        policy_level: str,
+        details: Optional[Dict] = None,
+        correlation_id: Optional[str] = None,
+    ) -> None:
+        """
+        記錄 policy trace（in-memory + jsonl）。
+        """
+        if not correlation_id:
+            correlation_id = f"audit_{uuid.uuid4().hex[:10]}"
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "policy_level": (policy_level or "normal"),
+            "correlation_id": correlation_id,
+            "details": details or {},
+        }
+
+        with self._memory_lock:
+            self.policy_audit_trail.append(entry)
+            if len(self.policy_audit_trail) > self.MAX_AUDIT_TRAIL:
+                self.policy_audit_trail = self.policy_audit_trail[-self.MAX_AUDIT_TRAIL:]
+
+        try:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            with open(self.policy_audit_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            self.logger.warning(f"Failed to append policy audit trail: {exc}")
+
+    def get_policy_audit_trail(self, limit: int = 100) -> List[Dict]:
+        """讀取近期 policy trace。"""
+        with self._memory_lock:
+            if limit <= 0:
+                return []
+            return [dict(item) for item in self.policy_audit_trail[-limit:]]
 
     # ==================== 初始化與加載 ====================
 
@@ -159,6 +208,169 @@ class EternalEchoMemory:
             self.logger.error(f"Unexpected error loading memories: {e}")
             self.memories = []
             self.memory_index = {}
+
+    def _load_canonical_reference_strings(self) -> List[str]:
+        """
+        載入 canonical 童年記憶字串，用於敘事一致性比對。
+        """
+        canon_file = self.data_dir / "seele_childhood_canon.json"
+        references: List[str] = []
+        if not canon_file.exists():
+            return references
+        try:
+            with open(canon_file, 'r', encoding='utf-8') as f:
+                payload = json.load(f)
+            memories = payload.get("memories", []) if isinstance(payload, dict) else []
+            if not isinstance(memories, list):
+                return references
+            for mem in memories:
+                if not isinstance(mem, dict):
+                    continue
+                for field in ("title", "anchor", "lesson"):
+                    value = str(mem.get(field, "")).strip()
+                    if value:
+                        references.append(value)
+        except Exception as exc:
+            self.logger.warning(f"Failed to load canonical references: {exc}")
+        return references
+
+    def _assess_narrative_drift_risk(
+        self,
+        response: str,
+        session_state: Dict,
+        extracted_info: Dict,
+    ) -> Dict[str, object]:
+        """
+        評估單條回應是否存在敘事漂移風險。
+        """
+        score = 0.0
+        reasons: List[str] = []
+        text = response or ""
+
+        if any(marker in text for marker in self.AUTOBIOGRAPHY_MARKERS):
+            score += 0.5
+            reasons.append("autobiography_claim_detected")
+            if self._canonical_reference_strings:
+                if not any(ref in text for ref in self._canonical_reference_strings):
+                    score += 0.35
+                    reasons.append("noncanonical_autobiography_claim")
+            else:
+                score += 0.2
+                reasons.append("canonical_reference_unavailable")
+
+        signal = extracted_info.get("narrative_drift_signal")
+        if signal is not None:
+            try:
+                score += max(0.0, min(1.0, float(signal))) * 0.5
+                reasons.append("external_drift_signal")
+            except (TypeError, ValueError):
+                pass
+
+        intimacy = float(session_state.get("intimacy", 0.0) or 0.0)
+        if intimacy < 0.6 and any(token in text for token in ("命中注定", "永遠屬於", "老婆")):
+            score += 0.25
+            reasons.append("relationship_stage_violation")
+
+        score = max(0.0, min(1.0, score))
+        if score >= self.NARRATIVE_DRIFT_CRITICAL:
+            level = "critical"
+        elif score >= self.NARRATIVE_DRIFT_WARNING:
+            level = "warning"
+        else:
+            level = "none"
+        return {"score": score, "level": level, "reasons": reasons}
+
+    def _memory_has_narrative_drift_risk(self, memory: Dict) -> bool:
+        """判斷記憶是否帶有漂移風險標記。"""
+        if not isinstance(memory, dict):
+            return False
+        metadata = memory.get("metadata", {})
+        if not isinstance(metadata, dict):
+            return False
+        guardrail = metadata.get("narrative_guardrail", {})
+        if not isinstance(guardrail, dict):
+            return False
+        return guardrail.get("level") in {"warning", "critical"}
+
+    def _policy_level_from_drift_level(self, drift_level: str) -> str:
+        level = str(drift_level or "").lower()
+        if level == "critical":
+            return "critical"
+        if level == "warning":
+            return "strict"
+        return "normal"
+
+    def _resolve_update_policy_level(self, memory: Dict, updates: Dict) -> str:
+        """
+        決定 update_echo 當次應用的 memory policy level。
+        """
+        if not isinstance(memory, dict):
+            return "normal"
+        if not isinstance(updates, dict):
+            updates = {}
+
+        incoming_metadata = updates.get("metadata")
+        if isinstance(incoming_metadata, dict):
+            explicit = str(incoming_metadata.get("memory_policy_level", "")).lower()
+            if explicit in {"normal", "strict", "critical"}:
+                return explicit
+
+        current_metadata = memory.get("metadata", {})
+        if isinstance(current_metadata, dict):
+            explicit = str(current_metadata.get("memory_policy_level", "")).lower()
+            if explicit in {"normal", "strict", "critical"}:
+                return explicit
+
+            guardrail = current_metadata.get("narrative_guardrail", {})
+            if isinstance(guardrail, dict):
+                level = str(guardrail.get("level", "")).lower()
+                if level == "critical":
+                    return "critical"
+                if level == "warning":
+                    return "strict"
+
+        return "normal"
+
+    def _sanitize_update_metadata_by_policy(self, metadata: Dict, policy_level: str) -> Dict:
+        """
+        update_echo 專用 metadata 清洗，防止 strict/critical 模式回寫風險片段。
+        """
+        if not isinstance(metadata, dict):
+            return {}
+        if policy_level not in {"strict", "critical"}:
+            return dict(metadata)
+
+        def _sanitize_value(value):
+            if isinstance(value, dict):
+                cleaned = {}
+                for k, v in value.items():
+                    sanitized_v = _sanitize_value(v)
+                    if sanitized_v is not None:
+                        cleaned[k] = sanitized_v
+                return cleaned
+            if isinstance(value, list):
+                cleaned_list = []
+                for item in value:
+                    sanitized_item = _sanitize_value(item)
+                    if sanitized_item is not None:
+                        cleaned_list.append(sanitized_item)
+                return cleaned_list
+            if isinstance(value, str):
+                if not any(marker in value for marker in self.AUTOBIOGRAPHY_MARKERS):
+                    return value
+                if policy_level == "critical":
+                    return None
+                sanitized = value
+                for marker in self.AUTOBIOGRAPHY_MARKERS:
+                    sanitized = sanitized.replace(marker, "我記得")
+                return sanitized
+            return value
+
+        cleaned = _sanitize_value(dict(metadata))
+        if not isinstance(cleaned, dict):
+            cleaned = {}
+        cleaned["memory_policy_level"] = policy_level
+        return cleaned
 
     def _validate_memory(self, mem: Dict) -> bool:
         """
@@ -275,8 +487,38 @@ class EternalEchoMemory:
         Returns:
             新記憶的 ID
         """
+        correlation_id = str(
+            extracted_info.get("decision_correlation_id")
+            or extracted_info.get("correlation_id")
+            or f"dec_{uuid.uuid4().hex[:10]}"
+        )
+
         if not user_input or not response:
             self.logger.warning("User input or response empty, skipping")
+            self._record_policy_trace(
+                operation="generate_and_store",
+                policy_level="normal",
+                details={"result": "skipped_empty_input"},
+                correlation_id=correlation_id,
+            )
+            return ""
+
+        drift_risk = self._assess_narrative_drift_risk(
+            response=response,
+            session_state=session_state,
+            extracted_info=extracted_info,
+        )
+        if drift_risk["level"] == "critical":
+            self.logger.error(
+                f"Skip storing echo due to critical narrative drift: "
+                f"{drift_risk['score']:.2f} {drift_risk['reasons']}"
+            )
+            self._record_policy_trace(
+                operation="generate_and_store",
+                policy_level="critical",
+                details={"result": "blocked_drift", "drift": drift_risk},
+                correlation_id=correlation_id,
+            )
             return ""
 
         echo_id = self._generate_echo_id()
@@ -289,8 +531,9 @@ class EternalEchoMemory:
             'id': echo_id,
             'timestamp': datetime.now().isoformat(),
             'turn_count': session_state.get('turn_count', 0),
-            'user_input': user_input[:500],
-            'response': response[:500],
+            # P3 Zero-Truncation：存檔不硬截斷；容量由 MAX_MEMORIES 控管
+            'user_input': user_input,
+            'response': response,
             'embedding': embedding,
             'echo_score': echo_score,
             'weight': self.MAX_WEIGHT,
@@ -304,6 +547,15 @@ class EternalEchoMemory:
             'metadata': {
                 'session_id': session_state.get('session_id', 'unknown'),
                 'total_turns': session_state.get('turn_count', 0),
+                'decision_correlation_id': correlation_id,
+                'source': 'eternal_echo',
+                'memory_type': 'eternal_echo',
+                'canon_mutable': False,
+                'narrative_guardrail': {
+                    'score': drift_risk['score'],
+                    'level': drift_risk['level'],
+                    'reasons': drift_risk['reasons'],
+                },
             },
             'version': 3,
             'archived': False
@@ -327,6 +579,12 @@ class EternalEchoMemory:
         self.logger.info(
             f"Generated eternal echo {echo_id} "
             f"(score: {echo_score:.3f}, total: {len(self.memories)})"
+        )
+        self._record_policy_trace(
+            operation="generate_and_store",
+            policy_level=self._policy_level_from_drift_level(drift_risk.get("level", "none")),
+            details={"result": "stored", "echo_id": echo_id},
+            correlation_id=correlation_id,
         )
 
         return echo_id
@@ -371,6 +629,8 @@ class EternalEchoMemory:
         with self._memory_lock:
             for mem in self.memories:
                 if mem.get('archived'):
+                    continue
+                if self._memory_has_narrative_drift_risk(mem):
                     continue
 
                 embedding = mem.get('embedding')
@@ -608,10 +868,16 @@ class EternalEchoMemory:
 
     # ==================== 記憶更新/刪除 ====================
 
-    def update_echo(self, echo_id: str, updates: Dict) -> bool:
+    def update_echo(self, echo_id: str, updates: Dict, correlation_id: Optional[str] = None) -> bool:
         """更新永迴軌內容"""
         if echo_id not in self.memory_index:
             self.logger.warning(f"Echo not found: {echo_id}")
+            self._record_policy_trace(
+                operation="update_echo",
+                policy_level="normal",
+                details={"echo_id": echo_id, "result": "not_found"},
+                correlation_id=correlation_id,
+            )
             return False
 
         safe_fields = [
@@ -620,29 +886,61 @@ class EternalEchoMemory:
         ]
 
         try:
+            policy_level = "normal"
             with self._memory_lock:
                 idx = self.memory_index.get(echo_id)
                 if idx is not None and idx < len(self.memories):
                     mem = self.memories[idx]
+                    policy_level = self._resolve_update_policy_level(mem, updates)
 
                     for field, value in updates.items():
                         if field in safe_fields:
+                            if field == 'metadata':
+                                if isinstance(value, dict):
+                                    mem[field] = self._sanitize_update_metadata_by_policy(
+                                        value,
+                                        policy_level,
+                                    )
+                                continue
                             mem[field] = value
 
                     mem['last_accessed'] = datetime.now().isoformat()
 
             self._write_all_memories_async()
             self.logger.debug(f"Updated echo {echo_id}")
+            self._record_policy_trace(
+                operation="update_echo",
+                policy_level=policy_level,
+                details={"echo_id": echo_id, "result": "updated"},
+                correlation_id=correlation_id,
+            )
             return True
 
         except Exception as e:
             self.logger.error(f"Echo update failed: {e}")
+            self._record_policy_trace(
+                operation="update_echo",
+                policy_level="normal",
+                details={"echo_id": echo_id, "result": "error", "error": str(e)},
+                correlation_id=correlation_id,
+            )
             return False
 
-    def delete_echo(self, echo_id: str) -> bool:
+    def delete_echo(
+        self,
+        echo_id: str,
+        policy_level: str = "normal",
+        correlation_id: Optional[str] = None,
+    ) -> bool:
         """歸檔永迴軌 (標記為已歸檔)"""
         if echo_id not in self.memory_index:
             self.logger.warning(f"Echo not found: {echo_id}")
+            self._record_policy_trace(
+                operation="delete_echo",
+                policy_level=policy_level,
+                details={"echo_id": echo_id, "result": "not_found"},
+                correlation_id=correlation_id,
+            )
             return False
 
         try:
@@ -655,15 +953,33 @@ class EternalEchoMemory:
 
             self._write_all_memories_async()
             self.logger.info(f"Archived echo {echo_id}")
+            self._record_policy_trace(
+                operation="delete_echo",
+                policy_level=policy_level,
+                details={"echo_id": echo_id, "result": "archived"},
+                correlation_id=correlation_id,
+            )
             return True
 
         except Exception as e:
             self.logger.error(f"Echo deletion failed: {e}")
+            self._record_policy_trace(
+                operation="delete_echo",
+                policy_level=policy_level,
+                details={"echo_id": echo_id, "result": "error", "error": str(e)},
+                correlation_id=correlation_id,
+            )
             return False
 
     # ==================== 批量操作 ====================
 
-    def recall_by_island(self, island_type: str, k: int = 5) -> List[Dict]:
+    def recall_by_island(
+        self,
+        island_type: str,
+        k: int = 5,
+        policy_level: str = "normal",
+        correlation_id: Optional[str] = None,
+    ) -> List[Dict]:
         """按島嶼類型召回記憶"""
         with self._memory_lock:
             filtered = [
@@ -676,13 +992,21 @@ class EternalEchoMemory:
         result = filtered[:k]
 
         self.logger.debug(f"Recalled {len(result)} memories from {island_type}")
+        self._record_policy_trace(
+            operation="recall_by_island",
+            policy_level=policy_level,
+            details={"island_type": island_type, "k": k, "result_count": len(result)},
+            correlation_id=correlation_id,
+        )
         return [mem.copy() for mem in result]
 
     def recall_by_intimacy_range(
         self,
         min_intimacy: float = 0.0,
         max_intimacy: float = 1.0,
-        k: int = 5
+        k: int = 5,
+        policy_level: str = "normal",
+        correlation_id: Optional[str] = None,
     ) -> List[Dict]:
         """按親密度範圍召回記憶"""
         with self._memory_lock:
@@ -698,6 +1022,17 @@ class EternalEchoMemory:
         self.logger.debug(
             f"Recalled {len(result)} memories in intimacy range "
             f"[{min_intimacy}, {max_intimacy}]"
+        )
+        self._record_policy_trace(
+            operation="recall_by_intimacy_range",
+            policy_level=policy_level,
+            details={
+                "min_intimacy": min_intimacy,
+                "max_intimacy": max_intimacy,
+                "k": k,
+                "result_count": len(result),
+            },
+            correlation_id=correlation_id,
         )
         return [mem.copy() for mem in result]
 
@@ -902,6 +1237,17 @@ class EternalEchoMemory:
         # 檢查 4: 平均權重
         if stats['avg_weight'] < self.MIN_WEIGHT * 1.5:
             issues.append("Average weight too low - consider memory refresh")
+
+        # 檢查 5: 敘事漂移風險記憶比例
+        with self._memory_lock:
+            active_memories = [m for m in self.memories if not m.get('archived')]
+            risky_count = sum(1 for m in active_memories if self._memory_has_narrative_drift_risk(m))
+        if active_memories:
+            risky_ratio = risky_count / len(active_memories)
+            if risky_ratio >= 0.15:
+                issues.append(
+                    f"Narrative drift risky memories too high ({risky_count}/{len(active_memories)})"
+                )
 
         status = (
             "healthy"

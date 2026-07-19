@@ -16,6 +16,10 @@ from pathlib import Path
 import logging
 
 logger = logging.getLogger('vita.gsw_engine')
+AUTOBIOGRAPHY_MARKERS = (
+    '我爸爸', '我媽媽', '我出世', '我細個', '我童年',
+    '我以前住', '我家人', '我讀幼稚園', '我讀小學', '我讀中學',
+)
 
 
 class GSWEngine:
@@ -112,30 +116,48 @@ class GSWEngine:
         self,
         response_vector: List[float],
         user_input: str,
-        session_state: Dict
+        session_state: Dict,
+        restrict_memory: bool = False,
+        candidate_k: int = 5,
+        correlation_id: Optional[str] = None,
     ) -> Dict:
         """
         [修復 v8.3] 檢測漂移 - 完整 await
         """
         if not response_vector:
             return {
-                'drift_score': 0.5,
+                'drift_score': 0.0,
                 'closest_core_memory': None,
-                'closest_distance': 1.0
+                'closest_distance': 1.0,
+                'available': False,
+                'correlation_id': correlation_id,
             }
 
         try:
+            search_k = max(1, min(20, int(candidate_k)))
+            if correlation_id:
+                self.logger.debug(
+                    f"[DRIFT][{correlation_id}] start (restrict_memory={restrict_memory}, candidate_k={search_k})"
+                )
             similar_mems = await self.search_memories(
                 response_vector,
-                k=1,
+                k=search_k,
                 min_similarity=0.0
             )
 
+            if restrict_memory:
+                similar_mems = [
+                    mem for mem in similar_mems
+                    if self._is_allowed_restrict_memory_candidate(mem)
+                ]
+
             if not similar_mems:
                 return {
-                    'drift_score': 0.5,
+                    'drift_score': 0.0,
                     'closest_core_memory': None,
-                    'closest_distance': 1.0
+                    'closest_distance': 1.0,
+                    'available': False,
+                    'correlation_id': correlation_id,
                 }
 
             closest = similar_mems[0]
@@ -144,16 +166,49 @@ class GSWEngine:
             return {
                 'drift_score': drift_score,
                 'closest_core_memory': closest,
-                'closest_distance': drift_score
+                'closest_distance': drift_score,
+                'available': True,
+                'correlation_id': correlation_id,
             }
 
         except Exception as e:
-            self.logger.error(f"[DRIFT] Detection failed: {e}")
+            if correlation_id:
+                self.logger.error(f"[DRIFT][{correlation_id}] Detection failed: {e}")
+            else:
+                self.logger.error(f"[DRIFT] Detection failed: {e}")
             return {
-                'drift_score': 0.5,
+                'drift_score': 0.0,
                 'closest_core_memory': None,
-                'closest_distance': 1.0
+                'closest_distance': 1.0,
+                'available': False,
+                'correlation_id': correlation_id,
             }
+
+    def _is_allowed_restrict_memory_candidate(self, memory: Dict[str, Any]) -> bool:
+        """
+        與 personality_module restrict_memory 一致的候選允許規則。
+        """
+        if not isinstance(memory, dict):
+            return False
+
+        memory_id = str(memory.get('id', ''))
+        if memory_id.startswith(('core_', 'memory_', 'echo_')):
+            return True
+
+        metadata = memory.get('metadata', {})
+        if isinstance(metadata, dict):
+            memory_type = str(metadata.get('memory_type', '')).lower()
+            source = str(metadata.get('source', '')).lower()
+            if memory_type in {'core', 'canonical', 'eternal_echo'}:
+                return True
+            if source in {'core', 'canonical', 'eternal_echo', 'seele_childhood_canon'}:
+                return True
+
+        record_type = str(memory.get('record_type', '')).upper()
+        if record_type in {'CORE', 'CANON', 'ETERNAL_ECHO'}:
+            return True
+
+        return False
 
     def judge_eternal_echo_generation(
         self,
@@ -181,10 +236,37 @@ class GSWEngine:
         )
         sentiment_score = 0.5 if sentiment_intensity > 0.6 else 0.0
 
-        echo_score = keyword_score + sentiment_score
+        base_score = keyword_score + sentiment_score
+
+        # drift-aware 雙因子：signal + alert_level
+        raw_signal = extracted_info.get('narrative_drift_signal', 0.0)
+        try:
+            drift_signal = max(0.0, min(1.0, float(raw_signal)))
+        except (TypeError, ValueError):
+            drift_signal = 0.0
+
+        alert_level = str(extracted_info.get('narrative_drift_alert_level', 'none')).lower()
+        alert_floor = 0.0
+        if alert_level == 'warning':
+            alert_floor = 0.7
+        elif alert_level == 'critical':
+            alert_floor = 1.0
+
+        effective_drift = max(drift_signal, alert_floor)
+
+        # 高漂移直接阻斷，避免把漂移內容固化成永迴軌
+        if effective_drift >= 0.85:
+            return False, 0.0
+
+        penalty_ratio = effective_drift * 0.8
+        echo_score = max(0.0, min(1.0, base_score * (1.0 - penalty_ratio)))
+        threshold = 0.75 if effective_drift >= 0.65 else 0.6
 
         # [修復 v8.3] 確保返回值類型
-        return echo_score >= 0.6, float(min(1.0, echo_score))
+        policy_level = self._resolve_memory_policy_level(extracted_info, session_state)
+        if policy_level == 'critical' and self._contains_autobiography_marker(response):
+            return False, 0.0
+        return echo_score >= threshold, float(echo_score)
 
     async def generate_and_store_echo(
         self,
@@ -203,6 +285,11 @@ class GSWEngine:
             return ""
 
         echo_id = f"echo_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        # P3.4：echo id 永不可落在正史／核心前綴
+        if echo_id.startswith(('memory_', 'core_', 'gold_hk_', 'canon_')):
+            self.logger.error(f"[ECHO] Illegal echo id generated: {echo_id}")
+            return ""
+
         user_id = session_state.get('user_id', 'unknown')
 
         # 【修復 v8.3】獲取嵌入向量
@@ -218,12 +305,31 @@ class GSWEngine:
                 embedding = None
 
         try:
+            # P3.3／P3.4：明示 skip 則不寫
+            if bool(extracted_info.get('skip_echo_consolidation')):
+                self.logger.info("[ECHO] Skipped by orchestrator hint")
+                return ""
+
+            policy_level = self._resolve_memory_policy_level(extracted_info, session_state)
             metadata = {
                 'primary_island': session_state.get('primary_island', 'Unknown'),
                 'intimacy': session_state.get('intimacy', 0.1),
                 'session_id': session_state.get('session_id', 'unknown'),
-                'user_sentiment': extracted_info.get('user_sentiment', {})
+                'user_sentiment': extracted_info.get('user_sentiment', {}),
+                'narrative_drift_signal': extracted_info.get('narrative_drift_signal', 0.0),
+                'narrative_drift_alert_level': extracted_info.get('narrative_drift_alert_level', 'none'),
+                'memory_policy_level': policy_level,
+                'source': 'eternal_echo',
+                'memory_type': 'eternal_echo',
+                'canon_mutable': False,
             }
+            metadata_overrides = extracted_info.get('metadata_overrides')
+            if isinstance(metadata_overrides, dict):
+                metadata.update(metadata_overrides)
+            metadata['source'] = 'eternal_echo'
+            metadata['memory_type'] = 'eternal_echo'
+            metadata['canon_mutable'] = False
+            metadata = self._sanitize_metadata_by_policy(metadata, policy_level)
 
             # 【修復 v8.3】使用異步 DB 存儲
             if (self.db_manager and 
@@ -245,14 +351,14 @@ class GSWEngine:
                     self.logger.error(f"[ECHO] Failed to store {echo_id}")
                     return ""
 
-            # Fallback：記憶管理器存儲
+            # Fallback：記憶管理器存儲（Zero-Truncation：不硬截斷正文）
             if self.memory_manager:
                 try:
                     echo_record = {
                         'id': echo_id,
                         'user_id': user_id,
-                        'user_input': user_input[:300],
-                        'response': response[:300],
+                        'user_input': user_input,
+                        'response': response,
                         'embedding': embedding,
                         'echo_score': echo_score,
                         'metadata': metadata,
@@ -306,10 +412,80 @@ class GSWEngine:
                     self.logger.error(f"[DECAY] Memory manager decay failed: {e}")
 
             return False
-
         except Exception as e:
             self.logger.error(f"[DECAY] Operation failed: {e}")
             return False
+
+    def _resolve_memory_policy_level(self, extracted_info: Dict, session_state: Dict) -> str:
+        """
+        將 drift/restrict 訊號統一成 memory policy level。
+        """
+        explicit = str(extracted_info.get('memory_policy_level', '')).lower()
+        if explicit in {'normal', 'strict', 'critical'}:
+            return explicit
+
+        alert_level = str(extracted_info.get('narrative_drift_alert_level', 'none')).lower()
+        if alert_level == 'critical':
+            return 'critical'
+        if alert_level == 'warning':
+            return 'strict'
+
+        meta_control = extracted_info.get('metacognitive_control', {})
+        if isinstance(meta_control, dict):
+            if bool(meta_control.get('restrict_memory', False)):
+                return 'strict'
+
+        drift_info = session_state.get('last_drift_info', {}) if isinstance(session_state, dict) else {}
+        if isinstance(drift_info, dict):
+            if str(drift_info.get('alert_level', '')).lower() == 'critical':
+                return 'critical'
+            if str(drift_info.get('alert_level', '')).lower() == 'warning':
+                return 'strict'
+
+        return 'normal'
+
+    def _contains_autobiography_marker(self, text: str) -> bool:
+        if not text or not isinstance(text, str):
+            return False
+        return any(marker in text for marker in AUTOBIOGRAPHY_MARKERS)
+
+    def _sanitize_metadata_by_policy(self, metadata: Dict[str, Any], policy_level: str) -> Dict[str, Any]:
+        """
+        依 memory policy 對 metadata 做一致性清洗，避免非 canonical 自傳片段落盤。
+        """
+        if not isinstance(metadata, dict):
+            return {}
+        if policy_level not in {'strict', 'critical'}:
+            return metadata
+
+        def _sanitize_value(value: Any) -> Any:
+            if isinstance(value, dict):
+                cleaned: Dict[str, Any] = {}
+                for k, v in value.items():
+                    sanitized_v = _sanitize_value(v)
+                    if sanitized_v is not None:
+                        cleaned[k] = sanitized_v
+                return cleaned
+            if isinstance(value, list):
+                cleaned_list = []
+                for item in value:
+                    sanitized_item = _sanitize_value(item)
+                    if sanitized_item is not None:
+                        cleaned_list.append(sanitized_item)
+                return cleaned_list
+            if isinstance(value, str):
+                if not self._contains_autobiography_marker(value):
+                    return value
+                if policy_level == 'critical':
+                    return None
+                sanitized = value
+                for marker in AUTOBIOGRAPHY_MARKERS:
+                    sanitized = sanitized.replace(marker, '我記得')
+                return sanitized
+            return value
+
+        cleaned = _sanitize_value(dict(metadata))
+        return cleaned if isinstance(cleaned, dict) else {}
 
     async def batch_search_memories(
         self,

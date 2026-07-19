@@ -1253,16 +1253,28 @@ class Orchestrator:
         memory_context: str = "",
         sensing_bundle: Optional[SensingBundle] = None,
         result: Optional[Dict[str, Any]] = None,
+        personality_system_prompt: str = "",
     ) -> str:
-        """當 Navigator 未產出回應時，透過 Star-Orchestration 或 LLM 管線生成初稿。"""
+        """當 Navigator 未產出回應時，透過 Star-Orchestration 或 LLM 管線生成初稿。
+
+        personality_system_prompt：PersonalityModule Layer 1（PersonaGraph + SystemPromptBuilder）
+        前置產出的完整系統提示。有則優先使用，使初稿已帶希兒人格方向。
+        """
         min_len = PerformanceConfig.MIN_RESPONSE_LENGTH
 
-        base_system_parts = [
-            "你是 Vita，一位溫暖、專業的心理伴侶。",
-            "以自然、有同理心的繁體中文回應，避免過短或敷衍。",
-        ]
-        if language_hint:
-            base_system_parts.append(f"語言偏好: {language_hint}")
+        # Zero-Truncation：前置人格 prompt 完整注入，不截斷。
+        seele_prompt = (personality_system_prompt or "").strip()
+        if seele_prompt:
+            base_system_parts = [seele_prompt]
+            if language_hint:
+                base_system_parts.append(f"語言偏好: {language_hint}")
+        else:
+            base_system_parts = [
+                "你是 Vita，一位溫暖、專業的心理伴侶。",
+                "以自然、有同理心的繁體中文回應，避免過短或敷衍。",
+            ]
+            if language_hint:
+                base_system_parts.append(f"語言偏好: {language_hint}")
 
         # v9: Nemo primary -> conditional Llama audit -> Gemma personality
         if (
@@ -1677,17 +1689,35 @@ class Orchestrator:
         try:
             loop = asyncio.get_running_loop()
             
-            drift_result = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    self.gsw_engine.detect_drift,
-                    response_vector,
-                    user_text,
-                    session_state
-                ),
-                timeout=PerformanceConfig.GSW_TIMEOUT
-            )
-            
+            # detect_drift 為 async；不可丟進 run_in_executor（會得到 coroutine 物件）。
+            if asyncio.iscoroutinefunction(self.gsw_engine.detect_drift):
+                drift_result = await asyncio.wait_for(
+                    self.gsw_engine.detect_drift(
+                        response_vector=response_vector,
+                        user_input=user_text,
+                        session_state=session_state,
+                    ),
+                    timeout=PerformanceConfig.GSW_TIMEOUT
+                )
+            else:
+                drift_result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        self.gsw_engine.detect_drift,
+                        response_vector,
+                        user_text,
+                        session_state
+                    ),
+                    timeout=PerformanceConfig.GSW_TIMEOUT
+                )
+
+            if asyncio.iscoroutine(drift_result):
+                self.logger.error({
+                    "event": "gsw_drift_coroutine_leak",
+                    "session_id": session_id,
+                })
+                return {'drift_score': 0.5, 'closest_core_memory': None, 'available': False}
+
             return drift_result if drift_result else {'drift_score': 0.5, 'closest_core_memory': None}
             
         except asyncio.TimeoutError:
@@ -2532,40 +2562,144 @@ class Orchestrator:
                             "error": str(e)
                         })
 
+                # ========== 4.4 Layer 1：PersonaGraph + SystemPrompt 前置 ==========
+                # 在 draft 之前解析島嶼/階段/政策，並把完整 system_prompt 注入初稿生成。
+                pre_draft_guidance: Optional[Dict[str, Any]] = None
+                personality_system_prompt = ""
+                # P3.3：只收集白名單 hints，不做 ABCD 分類
+                orchestrator_hints: Dict[str, Any] = {}
+                raw_hints = kwargs.get('orchestrator_hints')
+                if isinstance(raw_hints, dict):
+                    for key in (
+                        'user_mode_hint',
+                        'skip_echo_consolidation',
+                        'expression_preference',
+                        'force_quiet_presence',
+                        'decision_correlation_id',
+                    ):
+                        if key in raw_hints and raw_hints[key] is not None:
+                            orchestrator_hints[key] = raw_hints[key]
+                for key in (
+                    'user_mode_hint',
+                    'skip_echo_consolidation',
+                    'expression_preference',
+                    'force_quiet_presence',
+                ):
+                    if key in kwargs and kwargs[key] is not None and key not in orchestrator_hints:
+                        orchestrator_hints[key] = kwargs[key]
+                if self.personality and hasattr(self.personality, 'prepare_draft_guidance'):
+                    try:
+                        pre_draft_guidance = self.personality.prepare_draft_guidance(
+                            user_input=user_text,
+                            session_state=updated_session_state,
+                            turn_info={
+                                'user_sentiment': emotions_vsc,
+                                'memory_context': memory_context,
+                                'retrieved_memories': retrieved_memories,
+                                'risk_level': session_risk,
+                                'orchestrator_hints': orchestrator_hints,
+                            },
+                        )
+                        if isinstance(pre_draft_guidance, dict):
+                            personality_system_prompt = str(
+                                pre_draft_guidance.get('system_prompt') or ""
+                            )
+                            if pre_draft_guidance.get('primary_island'):
+                                updated_session_state['primary_island'] = (
+                                    pre_draft_guidance['primary_island']
+                                )
+                            if pre_draft_guidance.get('relationship_stage'):
+                                updated_session_state['relationship_stage'] = (
+                                    pre_draft_guidance['relationship_stage']
+                                )
+                            result['metadata']['persona_graph'] = {
+                                'used': True,
+                                'primary_island': pre_draft_guidance.get('primary_island'),
+                                'relationship_stage': pre_draft_guidance.get(
+                                    'relationship_stage'
+                                ),
+                                'intensity': pre_draft_guidance.get('intensity'),
+                                'graph_version': pre_draft_guidance.get('graph_version'),
+                                'prompt_chars': len(personality_system_prompt),
+                                'soul_memory_id': pre_draft_guidance.get('soul_memory_id'),
+                                'soul_memory_source': pre_draft_guidance.get(
+                                    'soul_memory_source'
+                                ),
+                                'orchestrator_hints': pre_draft_guidance.get(
+                                    'orchestrator_hints'
+                                ) or orchestrator_hints,
+                            }
+                            result['metadata']['system_prompt_pre_draft'] = True
+                            result['metadata']['prompt_contract'] = (
+                                pre_draft_guidance.get('prompt_contract')
+                                or 'pre_draft_full_no_truncation'
+                            )
+                    except Exception as pre_exc:
+                        self.logger.warning({
+                            "event": "pre_draft_guidance_failed",
+                            "session_id": session_id,
+                            "error": str(pre_exc),
+                        })
+                        pre_draft_guidance = None
+                        personality_system_prompt = ""
+
                 # ========== 4.5 LLM 初稿生成（Navigator 未產出時） ==========
                 if self._is_response_too_short(final_response):
                     draft_response = await self._generate_draft_response(
                         user_text=user_text,
-                        session_state=session_state,
+                        session_state=updated_session_state,
                         emotions_vsc=emotions_vsc,
                         language_hint=language_hint,
                         weather_context=weather_context,
                         memory_context=memory_context,
                         sensing_bundle=sensing_bundle,
                         result=result,
+                        personality_system_prompt=personality_system_prompt,
                     )
                     if draft_response:
                         final_response = draft_response
                         result['metadata']['llm_draft_used'] = True
+                        if personality_system_prompt:
+                            result['metadata']['seele_system_prompt_used_in_draft'] = True
 
                 # ========== 5. 委派 PersonalityModule.anchor() ==========
                 if self.personality:
                     try:
+                        # Drift / echo policy 必須用「草稿回應」向量，不可重用用戶查詢向量。
+                        response_embedding = embedding
+                        if final_response:
+                            try:
+                                draft_embedding = await self._get_embedding(final_response)
+                                if draft_embedding:
+                                    response_embedding = draft_embedding
+                            except Exception as emb_exc:
+                                self.logger.warning({
+                                    "event": "response_embedding_fallback",
+                                    "session_id": session_id,
+                                    "error": str(emb_exc),
+                                })
+
                         turn_info: Dict[str, Any] = {
                             'embedding': embedding,
-                            'response_embedding': embedding,
+                            'response_embedding': response_embedding,
                             'emotion_urgency': 5 if emotions_vsc.get('arousal', 0.0) > 0.8 else 1,
                             'is_crisis': emotions_vsc.get('arousal', 0.0) > 0.8,
                             'user_sentiment': emotions_vsc,
                             'weather_context': weather_context,
                             'language_hint': language_hint,
-                            'turn_count': session_state.get('turn_count', 0),
+                            'turn_count': updated_session_state.get('turn_count', 0),
                             'triggered_fractures': triggered_fractures,
                             'navigator_decision': nav_log,
                             'environment': self.environment,
                             'risk_level': session_risk,
                             'retrieved_memories': retrieved_memories,
                             'memory_context': memory_context,
+                            'pre_draft_guidance': pre_draft_guidance or {},
+                            'personality_system_prompt': personality_system_prompt,
+                            'orchestrator_hints': orchestrator_hints,
+                            'skip_echo_consolidation': bool(
+                                orchestrator_hints.get('skip_echo_consolidation')
+                            ),
                             'soul_guidance': (
                                 (result.get('metadata') or {})
                                 .get('star_orchestration', {})
@@ -2573,13 +2707,14 @@ class Orchestrator:
                             ),
                         }
                         turn_info.update(kwargs)
-                        
+
+                        # 傳入 updated_session_state，使 drift/intimacy/history 寫入可被後續持久化。
                         if asyncio.iscoroutinefunction(self.personality.anchor):
                             anchor_result = await asyncio.wait_for(
                                 self.personality.anchor(
                                     draft_response=final_response,
                                     user_input=user_text,
-                                    session_state=session_state,
+                                    session_state=updated_session_state,
                                     turn_info=turn_info
                                 ),
                                 timeout=PerformanceConfig.PERSONALITY_ANCHOR_TIMEOUT
@@ -2591,37 +2726,46 @@ class Orchestrator:
                                     self.personality.anchor,
                                     final_response,
                                     user_text,
-                                    session_state,
+                                    updated_session_state,
                                     turn_info
                                 ),
                                 timeout=PerformanceConfig.PERSONALITY_ANCHOR_TIMEOUT
                             )
-                        
+
                         response_text = ""
-                        if isinstance(anchor_result, dict):
+                        # 現行契約：anchor() -> (final_response, session_state)
+                        if isinstance(anchor_result, tuple) and len(anchor_result) >= 2:
+                            response_text = anchor_result[0] if isinstance(anchor_result[0], str) else ""
+                            state_out = anchor_result[1]
+                            if isinstance(state_out, dict):
+                                updated_session_state = state_out
+                        elif isinstance(anchor_result, dict):
                             response_text = (
                                 anchor_result.get('response')
                                 or anchor_result.get('text')
                                 or anchor_result.get('final_response')
                                 or ""
                             )
-                            updated_session_state = anchor_result.get(
-                                'session_state', session_state
-                            )
-                            if not self._is_response_too_short(response_text):
-                                final_response = response_text
-                                self.logger.info({
-                                    "event": "personality_anchor_success",
-                                    "session_id": session_id,
-                                    "response_length": len(final_response),
-                                    "status": "success"
-                                })
+                            state_out = anchor_result.get('session_state')
+                            if isinstance(state_out, dict):
+                                updated_session_state = state_out
                         elif isinstance(anchor_result, str):
-                            if not self._is_response_too_short(anchor_result):
-                                final_response = anchor_result
-                        
-                        result['metadata']['personality_used'] = not self._is_response_too_short(final_response)
-                        
+                            response_text = anchor_result
+
+                        if response_text and not self._is_response_too_short(response_text):
+                            final_response = response_text
+                            self.logger.info({
+                                "event": "personality_anchor_success",
+                                "session_id": session_id,
+                                "response_length": len(final_response),
+                                "status": "success"
+                            })
+
+                        result['metadata']['personality_used'] = (
+                            bool(response_text)
+                            and not self._is_response_too_short(response_text)
+                        )
+
                     except asyncio.TimeoutError:
                         self.logger.error({
                             "event": "personality_anchor_timeout",

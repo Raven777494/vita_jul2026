@@ -4,6 +4,7 @@
 import json
 import math
 import time
+import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
@@ -27,6 +28,14 @@ class MetacognitiveSystem:
     - 進化：記錄策略成功率，優化底層邏輯。
     """
 
+    DRIFT_ALERT_WARNING = 0.45
+    DRIFT_ALERT_CRITICAL = 0.75
+    AUTOBIOGRAPHY_MARKERS = (
+        "我爸爸", "我媽媽", "我出世", "我細個", "我童年",
+        "我以前住", "我家人", "我讀幼稚園", "我讀小學", "我讀中學",
+    )
+    MAX_TRACE_LOG = 1000
+
     def __init__(self, config: Dict, data_dir: str = './data'):
         self.logger = get_logger('metacognition')
         self.config = config
@@ -39,13 +48,74 @@ class MetacognitiveSystem:
             "confusion_level": 0.0,     # 困惑程度 (0.0 - 1.0)
             "island_entropy": 0.0,      # 島嶼衝突程度 (0.0 - 3.0)
             "active_strategy": "intuitive", # intuitive, analytical, cautious
-            "boundary_status": "normal" # normal, increased
+            "boundary_status": "normal", # normal, increased
+            "narrative_drift_score": 0.0,
+            "drift_alert_level": "none",
+            "last_decision_correlation_id": None,
         }
         
         # 載入元認知知識 (長期模型)
         self.knowledge_base = self._load_knowledge()
         
         self.logger.info("Metacognitive System initialized (The Console is active).")
+
+    def _evaluate_narrative_drift(
+        self,
+        user_input: str,
+        extracted_info: Dict,
+        session_state: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        敘事一致性監測：估計本回合的人格敘事漂移風險分數。
+        """
+        score = 0.0
+        reasons: List[str] = []
+        session_state = session_state or {}
+
+        signal = extracted_info.get("narrative_drift_signal")
+        if signal is not None:
+            try:
+                signal_value = max(0.0, min(1.0, float(signal)))
+                score += signal_value * 0.7
+                if signal_value >= 0.5:
+                    reasons.append("external_drift_signal")
+            except (TypeError, ValueError):
+                pass
+
+        intimacy = float(session_state.get("intimacy", 0.0) or 0.0)
+        escalation_markers = ("老婆", "女朋友", "永遠愛", "命中注定")
+        if intimacy < 0.6 and any(marker in user_input for marker in escalation_markers):
+            score += 0.25
+            reasons.append("relationship_stage_escalation")
+
+        retrieved = extracted_info.get("retrieved_memories", [])
+        if not isinstance(retrieved, list):
+            retrieved = []
+        for mem in retrieved[:5]:
+            if not isinstance(mem, dict):
+                continue
+            memory_id = str(mem.get("id", ""))
+            text = str(mem.get("content", mem.get("response", "")))
+            if not text:
+                continue
+            has_autobio = any(marker in text for marker in self.AUTOBIOGRAPHY_MARKERS)
+            if has_autobio and not memory_id.startswith("memory_"):
+                score += 0.35
+                reasons.append("noncanonical_autobiography_memory")
+                break
+
+        score = max(0.0, min(1.0, score))
+        if score >= self.DRIFT_ALERT_CRITICAL:
+            level = "critical"
+        elif score >= self.DRIFT_ALERT_WARNING:
+            level = "warning"
+        else:
+            level = "none"
+        return {
+            "score": score,
+            "level": level,
+            "reasons": reasons,
+        }
 
     def _load_knowledge(self) -> Dict:
         """載入關於自己的認知能力的知識"""
@@ -65,11 +135,24 @@ class MetacognitiveSystem:
                 "analytical": {"success": 0, "total": 0, "avg_sentiment_delta": 0.0},
                 "cautious": {"success": 0, "total": 0, "avg_sentiment_delta": 0.0}
             },
+            "strategy_decision_log": [],
+            "strategy_evaluation_log": [],
             "bias_awareness": {
                 "Mother": "tends to over-protect",
                 "Friend": "tends to be too casual"
             }
         }
+
+    def _append_trace(self, key: str, entry: Dict[str, Any]) -> None:
+        """
+        追加策略 trace 並限制長度，避免知識庫無限膨脹。
+        """
+        if key not in self.knowledge_base or not isinstance(self.knowledge_base.get(key), list):
+            self.knowledge_base[key] = []
+        trace_list = self.knowledge_base[key]
+        trace_list.append(entry)
+        if len(trace_list) > self.MAX_TRACE_LOG:
+            self.knowledge_base[key] = trace_list[-self.MAX_TRACE_LOG:]
 
     def check_boundary_with_dyadic(self, session_state: Dict, input_text: str, dyadic_dynamics: Any) -> Dict[str, Any]:
         """
@@ -114,6 +197,13 @@ class MetacognitiveSystem:
         Returns:
             Dict: 包含建議的控制參數 (Control Parameters)。
         """
+        correlation_id = str(
+            extracted_info.get("decision_correlation_id")
+            or extracted_info.get("correlation_id")
+            or (session_state or {}).get("last_decision_correlation_id")
+            or f"meta_{uuid.uuid4().hex[:10]}"
+        )
+
         # 1. 計算島嶼熵 (Shannon Entropy with Smoothing)
         epsilon = 0.01
         raw_values = list(island_activation.values())
@@ -136,19 +226,35 @@ class MetacognitiveSystem:
         if dyadic_dynamics and session_state:
             boundary_check = self.check_boundary_with_dyadic(session_state, user_input, dyadic_dynamics)
         
-        # 4. 更新狀態
+        # 4. 敘事一致性漂移檢查
+        drift_assessment = self._evaluate_narrative_drift(
+            user_input=user_input,
+            extracted_info=extracted_info,
+            session_state=session_state,
+        )
+
+        # 5. 更新狀態
         self.current_state["island_entropy"] = entropy
         self.current_state["cognitive_load"] = cognitive_load
         self.current_state["boundary_status"] = boundary_check.get("adjust")
+        self.current_state["narrative_drift_score"] = drift_assessment["score"]
+        self.current_state["drift_alert_level"] = drift_assessment["level"]
+        self.current_state["last_decision_correlation_id"] = correlation_id
         
-        # 5. 判斷策略 (Regulation)
+        # 6. 判斷策略 (Regulation)
         strategy = "intuitive"
         control_params = {
             "gsw_top_k": self.config.get('gsw_top_k', 5),
             "heretic_temperature": 0.7, # 默認
             "force_reflection": False,  # 是否強制反思
             "restrict_memory": False,   # 是否只允許核心記憶與永迴軌
-            "boundary_multiplier": 1.0  # 親密度累積倍率
+            "boundary_multiplier": 1.0, # 親密度累積倍率
+            "drift_alert_level": drift_assessment["level"],
+            "narrative_guardrails": {
+                "enabled": drift_assessment["level"] != "none",
+                "reasons": drift_assessment["reasons"],
+            },
+            "decision_correlation_id": correlation_id,
         }
 
         # 應用邊界調整
@@ -182,7 +288,40 @@ class MetacognitiveSystem:
             
             self.logger.info(f"[META] Flow State (Entropy: {entropy:.2f}). Strategy: INTUITIVE.")
 
+        if drift_assessment["level"] == "warning":
+            strategy = "cautious"
+            control_params["force_reflection"] = True
+            control_params["restrict_memory"] = True
+            control_params["gsw_top_k"] = min(control_params["gsw_top_k"], 4)
+            control_params["heretic_temperature"] = min(control_params["heretic_temperature"], 0.45)
+            control_params["boundary_multiplier"] *= 0.8
+            self.logger.warning(
+                f"[META] Narrative drift warning ({drift_assessment['score']:.2f}): "
+                f"{drift_assessment['reasons']}"
+            )
+        elif drift_assessment["level"] == "critical":
+            strategy = "cautious"
+            control_params["force_reflection"] = True
+            control_params["restrict_memory"] = True
+            control_params["gsw_top_k"] = 2
+            control_params["heretic_temperature"] = 0.25
+            control_params["boundary_multiplier"] *= 0.5
+            self.logger.error(
+                f"[META] Narrative drift critical ({drift_assessment['score']:.2f}): "
+                f"{drift_assessment['reasons']}"
+            )
+
         self.current_state["active_strategy"] = strategy
+        self._append_trace("strategy_decision_log", {
+            "timestamp": datetime.now().isoformat(),
+            "decision_correlation_id": correlation_id,
+            "strategy": strategy,
+            "drift_alert_level": drift_assessment["level"],
+            "drift_score": drift_assessment["score"],
+            "gsw_top_k": control_params.get("gsw_top_k"),
+            "restrict_memory": control_params.get("restrict_memory"),
+            "force_reflection": control_params.get("force_reflection"),
+        })
         
         return control_params
 
@@ -197,6 +336,12 @@ class MetacognitiveSystem:
             feedback_metrics: 包含 intimacy_delta, sentiment_delta, is_safe 等
         """
         strategy = self.current_state["active_strategy"]
+        correlation_id = str(
+            feedback_metrics.get("decision_correlation_id")
+            or feedback_metrics.get("correlation_id")
+            or self.current_state.get("last_decision_correlation_id")
+            or f"meta_eval_{uuid.uuid4().hex[:10]}"
+        )
         
         intimacy_delta = feedback_metrics.get("intimacy_delta", 0.0)
         sentiment_delta = feedback_metrics.get("sentiment_delta", 0.0) # 用戶情緒改善程度
@@ -232,6 +377,16 @@ class MetacognitiveSystem:
         stats["avg_sentiment_delta"] = new_avg
         
         self.knowledge_base["strategy_stats"][strategy] = stats
+        self._append_trace("strategy_evaluation_log", {
+            "timestamp": datetime.now().isoformat(),
+            "decision_correlation_id": correlation_id,
+            "strategy": strategy,
+            "is_success": is_success,
+            "success_score": success_score,
+            "intimacy_delta": intimacy_delta,
+            "sentiment_delta": sentiment_delta,
+            "is_safe": is_safe,
+        })
         
         success_rate = (stats["success"] / stats["total"]) * 100
         self.logger.debug(f"[META] Eval '{strategy}'. Success: {is_success} (Score: {success_score}). Rate: {success_rate:.1f}%. SentDelta: {sentiment_delta:.3f}")
@@ -247,9 +402,15 @@ class MetacognitiveSystem:
         entropy = self.current_state["island_entropy"]
         strategy = self.current_state["active_strategy"]
         boundary = self.current_state["boundary_status"]
+        drift_level = self.current_state.get("drift_alert_level", "none")
+        drift_score = self.current_state.get("narrative_drift_score", 0.0)
         
         introspection = ""
-        if boundary == "increase_boundary":
+        if drift_level == "critical":
+            introspection = f"(希兒察覺自我敘事可能偏移 [Drift: {drift_score:.2f}]，正鎖定核心記憶避免失真...)"
+        elif drift_level == "warning":
+            introspection = f"(希兒察覺敘事有偏移風險 [Drift: {drift_score:.2f}]，正在放慢並核對記憶一致性...)"
+        elif boundary == "increase_boundary":
             introspection = "(希兒感覺到一絲異樣，下意識地退後半步，更加謹慎...)"
         elif strategy == "cautious":
             introspection = f"(希兒感到內心有些混亂 [Entropy: {entropy:.2f}]，正在深呼吸，試著理清思緒...)"

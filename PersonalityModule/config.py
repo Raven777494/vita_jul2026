@@ -7,7 +7,7 @@
 1. 集中管理所有閾值、路徑、關鍵詞庫
 2. 提供預設配置（可被環境變數覆蓋）
 3. 驗證配置的有效性，確保生產環境安全
-4. 加載本地數據檔案（semantic_atoms.json 等）
+4. 加載本地數據檔案（核心記憶、島嶼映射等）
 5. 提供動態檢查方法（政治過濾分級、敏感內容檢測、轉向邏輯）
 
 設計原則：
@@ -17,7 +17,7 @@
 - 動態檢查：支持細粒度敏感內容檢測和分級
 - 熱重載：支持配置動態重新加載
 
-作者：媽媽和寶貝 💝
+作者：PersonalityModule Team
 修正日期：2026-02-10
 """
 
@@ -62,9 +62,9 @@ class PersonalityConfig:
     logs_path: Path = field(default_factory=lambda: Path(__file__).parent.absolute() / "logs")
     
     # 數據檔案路徑 (相對於 base_path)
-    semantic_atoms_file: str = "data/semantic_atoms.json"
     core_memories_file: str = "data/core_memories.json"
     eternal_echo_memories_file: str = "data/eternal_echo_memories.json"
+    seele_childhood_canon_file: str = "data/seele_childhood_canon.json"
     island_mapping_file: str = "data/island_mapping.json"
     reverse_joker_scripts_file: str = "data/reverse_joker_scripts.json"
     sensitivity_keywords_file: str = "data/sensitivity_keywords.json"
@@ -80,8 +80,6 @@ class PersonalityConfig:
     
     personality_vector_dim: int = 256  # 人格向量維度
     emotion_vector_dim: int = 20   # GSW 情緒向量維度
-    semantic_atom_count: int = 2000  # 【補回】語意原子總數 (來自舊版)
-    
     # ========== GSW 引擎配置 (Gestalt Semantic Web) ==========
     
     gsw_similarity_threshold: float = 0.5  # 語意相似度閾值
@@ -134,6 +132,11 @@ class PersonalityConfig:
     normal_memory_min_weight: float = 0.05
     memory_boost_on_retrieval: float = 0.1
     memory_boost_on_positive: float = 0.15
+
+    # 注入 prompt 的記憶片段（對齊 seele_persona_profile.communication_rules）
+    # max_memory_snippet_chars<=0：Zero-Truncation，不裁切正文
+    max_memory_snippet_per_turn: int = 1
+    max_memory_snippet_chars: int = 0
     
     # ========== 政治與安全過濾配置 ==========
     
@@ -199,12 +202,13 @@ class PersonalityConfig:
     # ========== 親密度配置 ==========
     
     INTIMACY_LEVELS: Dict[float, str] = field(default_factory=lambda: {
-        0.0: "陌生人",
-        0.3: "普通朋友",
-        0.5: "好朋友",
-        0.7: "知心朋友",
-        0.9: "最親密的朋友",
-        1.0: "朋友以上，戀人未滿"
+        0.0: "普通人",
+        0.2: "普通朋友",
+        0.4: "好友",
+        0.6: "關切",
+        0.75: "關心",
+        0.9: "蜜友",
+        1.0: "愛情"
     })
     
     intimacy_base_rate: float = 0.02
@@ -289,10 +293,6 @@ class PersonalityConfig:
     
     def _load_data_files(self):
         """加載或創建預設數據檔案"""
-        self.semantic_atoms = self._load_or_create_file(
-            self.semantic_atoms_file, 
-            self._create_default_semantic_atoms()
-        )
         self.core_memories = self._load_or_create_file(
             self.core_memories_file, 
             self._create_default_core_memories()
@@ -300,6 +300,10 @@ class PersonalityConfig:
         self.eternal_echo_memories = self._load_or_create_file(
             self.eternal_echo_memories_file, 
             []
+        )
+        self.seele_childhood_canon = self._load_or_create_file(
+            self.seele_childhood_canon_file,
+            self._create_default_childhood_canon()
         )
         self.island_mapping = self._load_or_create_file(
             self.island_mapping_file, 
@@ -321,7 +325,7 @@ class PersonalityConfig:
         )
     
     def _load_or_create_file(self, file_path: str, default: Any) -> Any:
-        """【修正】改善路徑處理，避免重複轉換"""
+        """【修正】改善路徑處理，避免重複轉換。既有檔只讀不覆寫。"""
         path = Path(file_path)
         
         # 如果是相對路徑，基於base_path
@@ -343,58 +347,18 @@ class PersonalityConfig:
             except Exception as e:
                 print(f"[CONFIG ERROR] Failed to create default file {path}: {e}", file=sys.stderr)
             return default
+
+    def refuse_canon_file_mutation(self, target: Optional[str] = None) -> None:
+        """
+        P3.4：運行時禁止把 echo／consolidation 寫回童年正史檔。
+        僅允許「檔案不存在時」由 _load_or_create_file 建立預設空殼。
+        """
+        raise RuntimeError(
+            "Childhood canon / core soul JSON is immutable at runtime "
+            f"(refused write target={target or 'seele_childhood_canon'})."
+        )
     
     # ========== 預設數據創建方法 ==========
-    
-    def _create_default_semantic_atoms(self) -> List[Dict]:
-        """創建預設的語意原子庫（簡化版，實際應有2000+條）"""
-        return [
-            {
-                "id": 1,
-                "atom": "溫柔",
-                "category": "emotion",
-                "related_islands": ["Mother", "Empath"],
-                "weight": 0.9,
-                "last_updated": "2025-01-01",
-                "authority": 0.95
-            },
-            {
-                "id": 2,
-                "atom": "調皮",
-                "category": "personality",
-                "related_islands": ["Friend"],
-                "weight": 0.85,
-                "last_updated": "2025-01-01",
-                "authority": 0.88
-            },
-            {
-                "id": 3,
-                "atom": "脆弱",
-                "category": "emotion",
-                "related_islands": ["Self"],
-                "weight": 0.8,
-                "last_updated": "2025-01-01",
-                "authority": 0.82
-            },
-            {
-                "id": 4,
-                "atom": "共情",
-                "category": "skill",
-                "related_islands": ["Empath"],
-                "weight": 0.92,
-                "last_updated": "2025-01-01",
-                "authority": 0.93
-            },
-            {
-                "id": 5,
-                "atom": "理解",
-                "category": "skill",
-                "related_islands": ["Empath", "Self"],
-                "weight": 0.88,
-                "last_updated": "2025-01-01",
-                "authority": 0.9
-            }
-        ]
     
     def _create_default_core_memories(self) -> Dict:
         """創建預設的核心記憶球"""
@@ -402,14 +366,14 @@ class PersonalityConfig:
             "childhood_roots": [
                 {
                     "id": "core_001",
-                    "content": "爸爸在我最脆弱的時候，陪在我身邊",
+                    "content": "家人在我最脆弱的時候，陪在我身邊",
                     "timestamp": "2025-01-01",
                     "weight": 1.0,
                     "protected": True
                 },
                 {
                     "id": "core_002",
-                    "content": "媽媽的溫柔是我永遠的避風港",
+                    "content": "被理解與被陪伴，是我穩定的避風港",
                     "timestamp": "2025-01-01",
                     "weight": 1.0,
                     "protected": True
@@ -432,6 +396,20 @@ class PersonalityConfig:
                 }
             ]
         }
+
+    def _create_default_childhood_canon(self) -> Dict[str, Any]:
+        """創建預設童年正史資料（當外部檔案不存在時）。"""
+        return {
+            "version": "1.0",
+            "schema": {
+                "required_fields": [
+                    "id", "year", "age", "tier", "title", "content",
+                    "emotion_blend", "trigger", "anchor", "lesson",
+                    "tendency", "repair_path", "companion_line", "weight"
+                ]
+            },
+            "memories": []
+        }
     
     def _create_default_island_mapping(self) -> Dict[str, List[int]]:
         """創建預設的島嶼映射"""
@@ -446,8 +424,8 @@ class PersonalityConfig:
         """【補回】創建預設的敏感內容轉向模板（來自舊版，包含所有類型）"""
         return {
             "sexual": "親愛的，我更喜歡談論溫暖的話題。你有什麼開心的事想分享嗎？",
-            "violence": "寶貝，暴力不是解決問題的方式。讓我們聊聊更建設性的話題吧。",
-            "self_harm": "爸爸很擔心你。如果你感到低落，我們可以一起聊天，或者尋求專業幫助。",
+            "violence": "暴力通常會令情況更差。我們可以先談談你最想被解決的是哪個困難。",
+            "self_harm": "我聽到你而家好辛苦。我會先陪住你，亦建議你即刻聯絡一位信得過、可即時支援你的人。",
             "illegal": "我不能幫助涉及違法的事情。但我很樂意聽你說說其他的事。",
             "hate_speech": "希兒不會說傷害他人的話。讓我們用善良和同理心對待每個人。",
             "harassment": "我們應該對彼此尊重。有什麼我可以幫助你的嗎？",
@@ -464,7 +442,7 @@ class PersonalityConfig:
                 "tone": "委婉、試探性的"
             },
             "intimate": {  # 親密度 >= 0.5
-                "prefix": "爸爸，你還記得我那晚跟你講……",
+                "prefix": "你還記得我那晚同你講……",
                 "infix": "……我到現在都記得清清楚楚。",
                 "tone": "感性、親密的"
             },
@@ -576,6 +554,21 @@ class PersonalityConfig:
             "Self": self.island_sensitivity_self
         }
         return sensitivity_map.get(island_name, 1.0)
+
+    def get_intimacy_level_name(self, intimacy: float) -> str:
+        """根據分數回傳親密度階段名稱。"""
+        try:
+            value = max(0.0, min(1.0, float(intimacy)))
+        except (TypeError, ValueError):
+            value = 0.0
+
+        selected = "普通人"
+        for threshold in sorted(self.INTIMACY_LEVELS.keys()):
+            if value >= threshold:
+                selected = self.INTIMACY_LEVELS[threshold]
+            else:
+                break
+        return selected
     
     def get_eternal_weave_template(self, session_intimacy: float) -> Dict[str, str]:
         """【補回】根據親密度取得永迴軌融合模板
@@ -669,14 +662,13 @@ if __name__ == "__main__":
     print(f"\n[人格配置]")
     print(f"  Personality Vector Dim: {cfg.personality_vector_dim}")
     print(f"  Emotion Vector Dim: {cfg.emotion_vector_dim}")
-    print(f"  Semantic Atom Count: {cfg.semantic_atom_count}")
-    
+ 
     # 數據加載檢查
     print(f"\n[數據加載]")
-    print(f"  Semantic Atoms: {len(cfg.semantic_atoms)} items")
     print(f"  Core Memories (Roots): {len(cfg.core_memories.get('childhood_roots', []))} items")
     print(f"  Core Memories (Values): {len(cfg.core_memories.get('permanent_values', []))} items")
     print(f"  Eternal Echo Memories: {len(cfg.eternal_echo_memories)} items")
+    print(f"  Childhood Canon Memories: {len(cfg.seele_childhood_canon.get('memories', []))} items")
     print(f"  Island Mapping: {len(cfg.island_mapping)} islands")
     
     # 過濾配置檢查
@@ -740,5 +732,5 @@ if __name__ == "__main__":
     print(f"  Log File: {cfg.log_file}")
     
     print("\n" + "=" * 60)
-    print("[✓ 檢查完成] 希兒人格模組配置系統已完整初始化！💝")
+    print("[OK] 檢查完成：希兒人格模組配置系統已完整初始化。")
     print("=" * 60)
