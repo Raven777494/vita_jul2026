@@ -1,8 +1,8 @@
 # VITA Go-Live 前剩餘勾選清單
 
-Version: 1.9 (section 2 monitoring complete)  
+Version: 1.10 (0.2 branch protection complete)  
 Date: 2026-07-19  
-Baseline: develop @ `94960c1`（2.3 webhook drill hardened）  
+Baseline: develop @ `b9f857f`（2.3 complete）  
 權威來源: [execution-program.md](execution-program.md) exit criteria、[governance-matrix.md](governance-matrix.md)、[RACI.md](RACI.md)  
 用途: 列出「repo 工程已完成、但 go-live 前仍須完成」之營運與組織項目，逐項標記 **Accountable（A）** 負責角色。
 
@@ -26,7 +26,7 @@ Baseline: develop @ `94960c1`（2.3 webhook drill hardened）
 | # | 項目 | 治理項 | Owner (A) | 執行 (R) | 產出 / 驗收 | 狀態 |
 |---|------|--------|-----------|----------|-------------|------|
 | 0.1 | 填入外部 roster（PO/ENG/CLIN/OPS 實名 + 聯絡） | 11 | PO | ENG | RACI 外部欄位 `OPS-ROSTER-001`；`RACI.md` 指向該 ID | 未完成 |
-| 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C1 + 外部 BP-RECORD | **部分** — repo 驗證就緒；GitHub UI 待 ENG |
+| 0.2 | GitHub branch protection（main/develop：PR review + CI 必過） | 7 | ENG | ENG | [github-setup-c-zone.md](../operations/github-setup-c-zone.md) C1 + `verify_branch_protection.py` + BP-RECORD | **完成** — `BP-RECORD-2026-07-001`；main/develop 必過 `test-and-alignment` + `dependency-audit`；solo approvals=0（2026-07-19） |
 | 0.3 | Release tag 流程 formalize（語意版號 + 標記規則） | 7 | ENG | ENG | `branch-strategy.md` 附錄 + RC tags | **完成** — `v1.0.0-rc.1` / `rc.2` / `rc.3` |
 
 ---

@@ -9,8 +9,8 @@ Aligns: [go-live-checklist.md](../governance/go-live-checklist.md) items **0.2**
 
 | # | Rule | VITA implementation |
 |---|------|---------------------|
-| 1 | **Verified Creator only** — blue checkmark on GitHub Marketplace | Workflows use **only** `actions/checkout`, `actions/setup-python` (official `actions/*` org). No third-party Marketplace actions. |
-| 2 | **Pin versions** — never `@main` / `@master` | `actions/checkout@v4`, `actions/setup-python@v5`. Verified in CI by `verify_github_workflows.py`. |
+| 1 | **Verified Creator only** — blue checkmark on GitHub Marketplace | Workflows use **only** `actions/checkout`, `actions/setup-python` (official `actions/*` org). **No third-party Marketplace actions** (even without Verified Creator badge). |
+| 2 | **Pin versions** — never `@main` / `@master` | `actions/checkout@v4`, `actions/setup-python@v5`. Verified in CI by `verify_github_workflows.py`. Prefer `@vN` or commit SHA. |
 | 3 | **Encrypted Secrets** — no passwords in YAML | Deploy uses `${{ secrets.NAME }}` only. `scan_secrets.py` + `verify_deploy_secrets_contract.py` in CI. |
 
 Local verify (before changing GitHub settings):
@@ -21,12 +21,30 @@ python scripts/governance/verify_deploy_secrets_contract.py
 python scripts/security/scan_secrets.py
 ```
 
+### Local ops archive path (not `D:\ops`)
+
+`D:\ops` was never a project directory — it was only an example path in older notes.
+
+Canonical **local** evidence archive (gitignored):
+
+| Host | Path |
+|------|------|
+| Engine7b | `D:\Desktop\engine7b\_ops_archive\` |
+| HSS | `D:\vita\_ops_archive\` (same relative `_ops_archive` under checkout) |
+
+```powershell
+# Example: archive webhook drill proof
+.\scripts\ops\archive_ops_record.ps1 `
+  -Source "logs\webhook-drill-proof.jsonl" `
+  -Name "WEBHOOK-DRILL-2026-07-001.jsonl"
+```
+
 ---
 
 ## C1 — Branch protection (go-live 0.2)
 
 **Owner (A):** ENG  
-**Where:** GitHub -> Settings -> Branches -> Add branch protection rule
+**Where:** GitHub UI **or** `apply_branch_protection.py` via `gh` API
 
 Apply **two rules** (one per branch): `main` and `develop`.
 
@@ -35,7 +53,7 @@ Apply **two rules** (one per branch): `main` and `develop`.
 | Setting | `main` | `develop` |
 |---------|--------|-----------|
 | Require a pull request before merging | Yes | Yes |
-| Required approvals | 1 (or 0 if solo maintainer — document in external ops log) | Same |
+| Required approvals | **0** if solo maintainer (document in BP-RECORD); else 1 | Same |
 | Dismiss stale pull request approvals | Yes | Yes |
 | Require status checks to pass | Yes | Yes |
 | Require branches to be up to date | Yes | Yes |
@@ -56,19 +74,61 @@ After at least one green CI run on the branch, add these checks (names match wor
 
 If GitHub UI shows prefixed names (e.g. `CI / test-and-alignment`), select the entries that correspond to the jobs above.
 
+### C1 step-by-step (recommended: `gh` API)
+
+Prerequisites: `gh auth login` with repo admin scope; CI has run green on `develop`/`main` at least once.
+
+```powershell
+cd D:\Desktop\engine7b
+
+# 1) Confirm workflows still follow Verified Creator + pinned tags
+python scripts/governance/verify_github_workflows.py
+
+# 2) Preview payload (no write)
+python scripts/governance/apply_branch_protection.py --dry-run
+
+# 3) Apply to main + develop (solo: approvals=0)
+python scripts/governance/apply_branch_protection.py
+
+# 4) Verify
+python scripts/governance/verify_branch_protection.py
+```
+
+Expected verify output:
+
+```
+[OK] Branch protection verification passed
+```
+
+Optional: require 1 approval instead of solo 0:
+
+```powershell
+python scripts/governance/apply_branch_protection.py --require-one-approval
+```
+
+### C1 UI fallback
+
+1. GitHub -> Settings -> Branches -> Add branch protection rule  
+2. Branch name pattern: `main` (repeat for `develop`)  
+3. Enable settings from the table above  
+4. Add status checks `test-and-alignment`, `dependency-audit`  
+5. Save
+
 ### Acceptance record
 
-Store externally (ops log, not in repo):
+Store under `_ops_archive/` (not in git):
 
 | Field | Value |
 |-------|-------|
 | Record ID | BP-RECORD-2026-07-NNN |
 | Date | |
 | Branches protected | main, develop |
-| Screenshot / export | Settings -> Branches |
+| Approvals | 0 (solo) or 1 |
+| Required checks | test-and-alignment, dependency-audit |
 | Verified by | ENG |
+| Command | `python scripts/governance/verify_branch_protection.py` exit 0 |
 
-Update [go-live-checklist.md](../governance/go-live-checklist.md) item **0.2** when complete.
+Update [go-live-checklist.md](../governance/go-live-checklist.md) item **0.2** when verify passes.
 
 ---
 
