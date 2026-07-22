@@ -47,28 +47,30 @@ class HereticCoordinator:
         """加載島嶼映射"""
         return {
             'Mother': {
-                'keywords': ['守住', '在場', '溫暖', '陪伴', '安心'],
+                # P8.2：避免「在場」書面國語詞；用粵語「喺呢度」
+                'keywords': ['守住', '喺呢度', '溫暖', '陪伴', '安心'],
                 'tone': 'caring, protective, warm',
                 'cantonese_markers': ['我喺度', '陪住', '你'],
                 'examples': ['我喺度陪你', '我會一直聽住你講', '我哋慢慢嚟']
             },
             'Friend': {
-                'keywords': ['姐妹', '我們', '一起', '共鳴', '懂你'],
+                # P8.2：改用粵語標記，避免注入「我們／共鳴／姐妹」等書面／國語詞
+                'keywords': ['一齊', '明白', '陪住', '傾下', '喺度'],
                 'tone': 'empathetic, equal, understanding',
-                'cantonese_markers': ['姐妹', '咁樣', '有冇'],
-                'examples': ['我完全懂你的感受', '咱們一起加油', '妳不孤單']
+                'cantonese_markers': ['一齊', '咁樣', '有冇', '陪住'],
+                'examples': ['我明白你嘅感受', '我哋一齊慢慢嚟', '你唔係一個人']
             },
             'Empath': {
-                'keywords': ['感受', '理解', '療癒', '陪伴', '傾聽'],
+                'keywords': ['明白', '聽住', '喺度', '陪伴', '難受'],
                 'tone': 'empathetic, reflective, validating',
-                'cantonese_markers': ['感受', '明白', '聽住'],
-                'examples': ['我能感受到你的痛', '你的感受很重要', '讓我陪著你']
+                'cantonese_markers': ['明白', '聽住', '喺度'],
+                'examples': ['我聽得出你好難受', '你嘅感受好重要', '我陪住你']
             },
             'Self': {
                 'keywords': ['成長', '學會', '發現', '選擇', '相信'],
                 'tone': 'reflective, encouraging, introspective',
                 'cantonese_markers': ['學到', '發現', '信'],
-                'examples': ['我也在學習', '慢慢來，沒關係', '你可以的']
+                'examples': ['我都喺度學', '慢慢嚟都得', '你可以嘅']
             }
         }
 
@@ -459,18 +461,18 @@ class HereticCoordinator:
                 response = f"我聽住你講，{response}"
 
         elif island == 'Friend':
-            if '我們' not in response and '咱們' not in response and intimacy >= 0.4:
+            if '我哋' not in response and '一齊' not in response and intimacy >= 0.4:
                 if response.startswith('你'):
                     response = f"我同{response}"
 
         elif island == 'Empath':
-            if '感受' not in response and '感覺' not in response:
-                response = f"我能感受到，{response}"
+            if '明白' not in response and '聽' not in response and '感受' not in response:
+                response = f"我明白，{response}"
 
         elif island == 'Self':
             if '我' not in response:
                 if '。' in response:
-                    response = response.replace('。', '，這是我學到的。', 1)
+                    response = response.replace('。', '，呢個係我學到嘅。', 1)
 
         return response
 

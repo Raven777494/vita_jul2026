@@ -21,6 +21,17 @@ AUTOBIOGRAPHY_MARKERS = (
     '我以前住', '我家人', '我讀幼稚園', '我讀小學', '我讀中學',
 )
 
+try:
+    from .echo_write_gate import (
+        EchoWriteGate,
+        sentiment_affect_intensity,
+        is_immutable_soul_memory_id,
+    )
+except ImportError:  # pragma: no cover
+    EchoWriteGate = None
+    sentiment_affect_intensity = None
+    is_immutable_soul_memory_id = None
+
 
 class GSWEngine:
     """GSW 引擎 v8.3 - 永恆迴響記憶系統"""
@@ -231,9 +242,17 @@ class GSWEngine:
             0.5 if any(kw in response for kw in trigger_keywords) else 0.0
         )
 
-        sentiment_intensity = abs(
-            extracted_info.get('user_sentiment', {}).get('intensity', 0)
-        )
+        sentiment = extracted_info.get('user_sentiment', {})
+        if not isinstance(sentiment, dict):
+            sentiment = {}
+        # P7／P6.1：EmotionService 多用 valence/arousal，未必有 intensity
+        if sentiment_affect_intensity is not None:
+            sentiment_intensity = sentiment_affect_intensity(sentiment)
+        else:
+            try:
+                sentiment_intensity = abs(float(sentiment.get('intensity', 0) or 0))
+            except (TypeError, ValueError):
+                sentiment_intensity = 0.0
         sentiment_score = 0.5 if sentiment_intensity > 0.6 else 0.0
 
         base_score = keyword_score + sentiment_score
@@ -284,9 +303,46 @@ class GSWEngine:
         if not user_input or not response:
             return ""
 
+        # P7：落盤前統一寫入閘（憲法級：空內容／hint／critical／正史 source）
+        gate = EchoWriteGate() if EchoWriteGate is not None else None
+        if gate is not None:
+            pre = gate.evaluate_pre_store(
+                user_input=user_input,
+                response=response,
+                echo_id="",
+                echo_score=echo_score,
+                metadata={
+                    'source': 'eternal_echo',
+                    'memory_type': 'eternal_echo',
+                    'canon_mutable': False,
+                },
+                extracted_info=extracted_info if isinstance(extracted_info, dict) else {},
+                session_state=session_state if isinstance(session_state, dict) else {},
+                turn_info=extracted_info if isinstance(extracted_info, dict) else {},
+                force=bool(
+                    isinstance(extracted_info, dict)
+                    and extracted_info.get('force_echo_store')
+                ),
+            )
+            if not pre.allowed:
+                self.logger.info(
+                    f"[ECHO] Write gate denied at pre_store: {pre.deny_reason}"
+                )
+                if isinstance(extracted_info, dict):
+                    extracted_info['echo_write_trace'] = pre.to_public_dict()
+                if isinstance(session_state, dict):
+                    session_state['echo_write_trace'] = pre.to_public_dict()
+                    session_state['echo_write_allowed'] = False
+                    session_state['echo_write_deny_reason'] = pre.deny_reason
+                return ""
+
         echo_id = f"echo_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
-        # P3.4：echo id 永不可落在正史／核心前綴
-        if echo_id.startswith(('memory_', 'core_', 'gold_hk_', 'canon_')):
+        # P3.4／P7：echo id 永不可落在正史／核心前綴
+        if is_immutable_soul_memory_id is not None:
+            illegal = is_immutable_soul_memory_id(echo_id)
+        else:
+            illegal = echo_id.startswith(('memory_', 'core_', 'gold_hk_', 'canon_'))
+        if illegal:
             self.logger.error(f"[ECHO] Illegal echo id generated: {echo_id}")
             return ""
 
@@ -305,7 +361,7 @@ class GSWEngine:
                 embedding = None
 
         try:
-            # P3.3／P3.4：明示 skip 則不寫
+            # P3.3／P3.4：明示 skip 則不寫（閘門已覆蓋；保留雙保險）
             if bool(extracted_info.get('skip_echo_consolidation')):
                 self.logger.info("[ECHO] Skipped by orchestrator hint")
                 return ""
@@ -330,6 +386,25 @@ class GSWEngine:
             metadata['memory_type'] = 'eternal_echo'
             metadata['canon_mutable'] = False
             metadata = self._sanitize_metadata_by_policy(metadata, policy_level)
+
+            # 再驗 metadata 不可偷帶 canon source
+            if gate is not None:
+                meta_check = gate.evaluate_pre_store(
+                    user_input=user_input,
+                    response=response,
+                    echo_id=echo_id,
+                    echo_score=echo_score,
+                    metadata=metadata,
+                    extracted_info=extracted_info,
+                    session_state=session_state,
+                    turn_info=extracted_info,
+                )
+                if not meta_check.allowed:
+                    self.logger.info(
+                        f"[ECHO] Write gate denied before backend store: "
+                        f"{meta_check.deny_reason}"
+                    )
+                    return ""
 
             # 【修復 v8.3】使用異步 DB 存儲
             if (self.db_manager and 
@@ -365,10 +440,15 @@ class GSWEngine:
                         'created_at': datetime.now().isoformat()
                     }
 
-                    await asyncio.to_thread(
+                    stored_ok = await asyncio.to_thread(
                         self.memory_manager.store,
                         echo_record
                     )
+                    if not stored_ok:
+                        self.logger.error(
+                            f"[ECHO] Memory manager refused store for {echo_id}"
+                        )
+                        return ""
 
                     self.logger.info(f"[ECHO] Stored {echo_id} via memory_manager")
                     return echo_id

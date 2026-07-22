@@ -565,15 +565,9 @@ class VocalPersonalityLayer:
             
             # 移除不自然的 LLM 人工轉接
             text = re.sub(r'(但是|然而|因此|所以)[，。]', r'\1，', text)
-            
-            # 根據島嶼調整節奏
-            if island == 'Mother':
-                # 母愛：加入更多溫暖的停頓
-                text = text.replace('，', '，…')
-            elif island == 'Self':
-                # 自我反省：保持思考的節奏
-                text = text.replace('，', '…')
-            
+
+            # P8.2／Zero-Truncation：不再把每個「，」改成「，…」（會污染粵語節奏）
+            # 節奏微調僅限過長句中偶發停頓標記，且不批量改寫全文。
             self._stats['cleanups'] += 1
             return text
         

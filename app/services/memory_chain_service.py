@@ -128,9 +128,6 @@ class MemoryChainService:
         if not self.gsw_engine or not user_input or not response:
             return None
 
-        if risk_level >= 4 and not force:
-            return None
-
         session_state = dict(session_state or {})
         session_state.setdefault('user_id', user_id)
         session_state.setdefault('session_id', session_id)
@@ -138,7 +135,49 @@ class MemoryChainService:
         extracted_info: Dict[str, Any] = {
             'response_embedding': response_embedding or user_embedding,
             'user_sentiment': emotion_profile or {},
+            'risk_level': risk_level,
         }
+
+        # P7：與 PersonalityModule 共用寫入閘
+        try:
+            from PersonalityModule.echo_write_gate import EchoWriteGate
+
+            gate = EchoWriteGate()
+            pre = gate.evaluate_pre_store(
+                user_input=user_input,
+                response=response,
+                echo_score=0.35,
+                metadata={
+                    'source': 'eternal_echo',
+                    'memory_type': 'eternal_echo',
+                    'canon_mutable': False,
+                },
+                extracted_info=extracted_info,
+                session_state=session_state,
+                turn_info={'risk_level': risk_level},
+                risk_level=risk_level,
+                force=bool(force),
+            )
+            if not pre.allowed:
+                self.logger.info({
+                    "event": "memory_chain_persist_skipped",
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "reason": pre.deny_reason,
+                    "echo_write_trace": pre.to_public_dict(),
+                })
+                session_state['echo_write_trace'] = pre.to_public_dict()
+                session_state['echo_write_deny_reason'] = pre.deny_reason
+                return None
+        except Exception as gate_exc:
+            self.logger.warning({
+                "event": "memory_chain_echo_write_gate_failed",
+                "user_id": user_id,
+                "session_id": session_id,
+                "error": str(gate_exc),
+            })
+            if risk_level >= 4 and not force:
+                return None
 
         try:
             should_store, echo_score = self.gsw_engine.judge_eternal_echo_generation(
@@ -162,9 +201,12 @@ class MemoryChainService:
                 "echo_score": float(echo_score or 0.0),
                 "reason": "judge_should_store_false",
             })
+            session_state['echo_write_deny_reason'] = 'judge_should_store_false'
             return None
 
         echo_score = max(0.35, float(echo_score or 0.35))
+        if force:
+            extracted_info['force_echo_store'] = True
 
         try:
             echo_id = await self.gsw_engine.generate_and_store_echo(

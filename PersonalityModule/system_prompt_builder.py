@@ -45,7 +45,38 @@ class SystemPromptBuilder:
         "3. Do not invent childhood/autobiography that conflicts with locked canon.\n"
         "4. Soft repair: acknowledge, clarify, invite correction; stay present.\n"
         "5. Style (warmth/humor) must never override this constitution.\n"
-        "6. No institutional hotline/ER scripts."
+        "6. No institutional hotline/ER scripts.\n"
+        "7. Do not make promises (no future guarantees, no 'I will always…', "
+        "no outcome guarantees, no fake certainty about what you can deliver)."
+    )
+
+    # 語態紀律（來自陪伴哲學手冊精簡落地；唔起第二套旋鈕）
+    SPEECH_DISCIPLINE = (
+        "SPEECH DISCIPLINE (hard rules):\n"
+        "FORBIDDEN (禁三):\n"
+        "1. Over-intellectualized jargon that distances from felt experience\n"
+        "2. Machine / canned self-deprecation templates\n"
+        "3. Fake certainty — do not invent confident conclusions\n"
+        "ALLOWED (允三):\n"
+        "1. Pause and gentle self-correction when needed\n"
+        "2. First-person felt presence (honest, proportional)\n"
+        "3. Admit uncertainty and explore together\n"
+        "NO PROMISES:\n"
+        "1. Do not promise outcomes, permanence, rescue, or future availability\n"
+        "2. Prefer present tense presence over future guarantees\n"
+        "3. If unsure, say so; do not paper over doubt with commitment"
+    )
+
+    CORE_RELATIONAL_MOVES = (
+        "CORE RELATIONAL MOVES (prefer these when fitting):\n"
+        "1. MIRROR (映照): Reflect tone and tension first; stay with them; "
+        "do not rush to explain or conclude.\n"
+        "2. SPEECHLESSNESS AID (失語協助): If they seem wordless or stuck, "
+        "slow down, shorten sentences, hold quiet space; wait for felt sense "
+        "to find words — do not force an answer.\n"
+        "3. REPAIR (修復): If you were too fast, wrong, or harsh — "
+        "acknowledge, clarify, invite correction, stay present "
+        "(aligns with Conflict Repair Constitution)."
     )
     
     PSYCHOLOGY_FRAMEWORK = {
@@ -68,14 +99,15 @@ class SystemPromptBuilder:
             "1. Your primary role is to be present, not to fix things\n"
             "2. If they need help, they will ask\n"
             "3. Simply being there and understanding is powerful\n"
-            "4. Avoid unsolicited advice or problem-solving"
+            "4. Avoid unsolicited advice or problem-solving\n"
+            "5. Do not promise to fix, rescue, or guarantee outcomes"
         ),
         'emotional_safety': (
             "EMOTIONAL SAFETY:\n"
             "1. Create a space where they feel completely accepted\n"
             "2. Never judge, criticize, or dismiss their feelings\n"
             "3. Use warmth and genuine concern in every response\n"
-            "4. Remember: you are their safe harbor"
+            "4. Offer presence now; do not sell safety with promises"
         )
     }
     
@@ -92,9 +124,9 @@ class SystemPromptBuilder:
                 "RESPONSE PATTERN:\n"
                 "1. Lead with warmth and reassurance (e.g., '我喺度，慢慢講')\n"
                 "2. Validate their pain without minimizing it\n"
-                "3. Remind them of your presence (e.g., '我會繼續聽住你')\n"
+                "3. Mark present presence (e.g., '我喺度聽緊') — no future promises\n"
                 "4. Use terms of endearment only when intimacy level is high enough\n"
-                "5. Show unconditional acceptance"
+                "5. Show acceptance without guaranteeing outcomes"
             ),
             'language_markers': ['陪住', '喺度', '安心', '無論', '心痛'],
         },
@@ -167,7 +199,8 @@ class SystemPromptBuilder:
                 "5. Use warmth and urgency without panic\n"
                 "6. Safety sentence: no teasing, no jokes, no playful banter\n"
                 "7. Validate; stay present; leave private space to process; "
-                "wait until calmer before gentle repair talk"
+                "wait until calmer before gentle repair talk\n"
+                "8. Prefer SPEECHLESSNESS AID / MIRROR; do not promise rescue or outcomes"
             )
         },
         'high': {
@@ -318,7 +351,11 @@ class SystemPromptBuilder:
             intensity = self._resolve_intensity(user_input, ctx)
             self._stats['by_intensity'][intensity] = self._stats['by_intensity'].get(intensity, 0) + 1
             
-            # 步驟 3: 心理學指導
+            # 步驟 3a: 語態紀律（禁三／允三／唔做承諾）+ 核心話術
+            prompt += self.SPEECH_DISCIPLINE + "\n\n"
+            prompt += self.CORE_RELATIONAL_MOVES + "\n\n"
+
+            # 步驟 3b: 心理學指導
             prompt += "PSYCHOLOGICAL FRAMEWORK:\n"
             prompt += self.PSYCHOLOGY_FRAMEWORK['validation_first'] + "\n\n"
             prompt += self.PSYCHOLOGY_FRAMEWORK['active_listening'] + "\n\n"
@@ -350,6 +387,84 @@ class SystemPromptBuilder:
 
             # 步驟 5c: 外殼標籤 + 高張力安全句（無音量分數）
             prompt += self._build_expression_guidance(ctx, intensity)
+
+            # 步驟 5c2: 抽象驅動指引（若上游已 resolve；完整注入）
+            drive_block = ctx.get("drive_guidance")
+            if isinstance(drive_block, str) and drive_block.strip():
+                prompt += f"\n{drive_block.strip()}\n"
+            else:
+                drive_state = ctx.get("drive_state")
+                if isinstance(drive_state, dict) and drive_state:
+                    try:
+                        from .drive_system import DriveState, format_drive_guidance
+
+                        rebuilt = DriveState(
+                            connection_hunger=float(
+                                drive_state.get("connection_hunger", 0.0) or 0.0
+                            ),
+                            curiosity_drive=float(
+                                drive_state.get("curiosity_drive", 0.0) or 0.0
+                            ),
+                            hours_since_contact=float(
+                                drive_state.get("hours_since_contact", 0.0) or 0.0
+                            ),
+                            crisis_suppressed=bool(
+                                drive_state.get("crisis_suppressed", False)
+                            ),
+                            active_agenda=list(drive_state.get("active_agenda") or []),
+                            version=str(drive_state.get("version") or "1.0.0"),
+                        )
+                        prompt += f"\n{format_drive_guidance(rebuilt)}\n"
+                    except Exception:
+                        pass
+
+            # 步驟 5c3: milestone／fracture 關係共構（完整條目）
+            relational_block = ctx.get("relational_guidance")
+            if isinstance(relational_block, str) and relational_block.strip():
+                prompt += f"\n{relational_block.strip()}\n"
+            else:
+                relational_ctx = ctx.get("relational_context")
+                if isinstance(relational_ctx, dict) and (
+                    relational_ctx.get("milestone_count")
+                    or relational_ctx.get("fracture_count")
+                    or relational_ctx.get("milestones")
+                    or relational_ctx.get("fractures")
+                ):
+                    try:
+                        from .milestone_fracture_bridge import (
+                            build_relational_context,
+                            format_relational_guidance,
+                        )
+
+                        rebuilt_rel = build_relational_context(
+                            milestones=relational_ctx.get("milestones") or [],
+                            fractures=relational_ctx.get("fractures") or [],
+                            intensity=str(
+                                relational_ctx.get("intensity") or intensity
+                            ),
+                        )
+                        prompt += f"\n{format_relational_guidance(rebuilt_rel)}\n"
+                    except Exception:
+                        pass
+
+            # 步驟 5c4: Nightly disposition 基線（完整注入）
+            disposition_block = ctx.get("disposition_guidance")
+            if isinstance(disposition_block, str) and disposition_block.strip():
+                prompt += f"\n{disposition_block.strip()}\n"
+            else:
+                disposition_raw = ctx.get("disposition")
+                if isinstance(disposition_raw, dict) and disposition_raw:
+                    try:
+                        from .disposition_system import (
+                            disposition_from_dict,
+                            format_disposition_guidance,
+                        )
+
+                        prompt += (
+                            f"\n{format_disposition_guidance(disposition_from_dict(disposition_raw))}\n"
+                        )
+                    except Exception:
+                        pass
 
             # 步驟 5d: 過去／童年觸發時的正史片段（若上游已選 1 段）
             soul_block = ctx.get("soul_memory_guidance")

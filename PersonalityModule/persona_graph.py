@@ -23,10 +23,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .utils.logger import get_logger
+from .vad_bridge import (
+    compute_island_gains,
+    format_island_gains_guidance,
+    normalize_vad,
+)
 
 logger = get_logger("persona_graph")
 
-GRAPH_VERSION = "0.3.0"
+from .version import GRAPH_CONTRACT_VERSION as GRAPH_VERSION
 ISLAND_IDS = ("Mother", "Friend", "Empath", "Self")
 VALUE_LABELS = {
     "Mother": "母愛",
@@ -100,6 +105,8 @@ class PersonaResolution:
     # 向後相容欄位：固定空 dict，不再承載音量分數
     trait_volumes: Dict[str, float] = field(default_factory=dict)
     expression_budget: Dict[str, float] = field(default_factory=dict)
+    island_gains: Dict[str, float] = field(default_factory=dict)
+    vad_normalized: Dict[str, Any] = field(default_factory=dict)
     graph_version: str = GRAPH_VERSION
     source: str = "persona_graph"
 
@@ -263,6 +270,7 @@ class PersonaGraph:
             intensity=intensity,
             risk_level=risk_level,
         )
+        gain_result = compute_island_gains(sentiment)
         fragment = self._build_prompt_fragment(
             primary_island=primary,
             activation=activation,
@@ -270,6 +278,8 @@ class PersonaGraph:
             intensity=intensity,
             policies=policies,
             trait_labels=trait_labels,
+            island_gains=gain_result.gains,
+            vad_guidance=format_island_gains_guidance(gain_result),
         )
 
         return PersonaResolution(
@@ -283,6 +293,8 @@ class PersonaGraph:
             trait_labels=trait_labels,
             trait_volumes={},
             expression_budget={},
+            island_gains=dict(gain_result.gains),
+            vad_normalized=gain_result.vad.to_public_dict(),
             graph_version=GRAPH_VERSION,
             source="persona_graph",
         )
@@ -342,11 +354,11 @@ class PersonaGraph:
             scores[island] += 0.12 * hit
 
         arousal = self._safe_float(user_sentiment.get("arousal"), 0.3)
-        valence = self._safe_float(user_sentiment.get("valence"), 0.5)
-        if arousal >= 0.7 or valence <= 0.35:
+        vad = normalize_vad(user_sentiment)
+        if arousal >= 0.7 or vad.valence_signed <= -0.25:
             scores["Empath"] += 0.25
             scores["Mother"] += 0.2
-        elif valence >= 0.7:
+        elif vad.valence_signed >= 0.25:
             scores["Friend"] += 0.2
             scores["Self"] += 0.1
 
@@ -393,10 +405,21 @@ class PersonaGraph:
             risk = 0
 
         arousal = self._safe_float(user_sentiment.get("arousal"), 0.3)
+        vad = normalize_vad(user_sentiment)
         if risk >= 4 or any(kw in user_input for kw in crisis_keywords):
             return "crisis"
-        if risk >= 3 or arousal >= 0.75 or any(kw in user_input for kw in high_keywords):
+        # 對齊 EmotionService 危機閾值：valence<=-0.7 且 arousal>=0.6
+        if vad.is_crisis_risk or (vad.valence_signed <= -0.7 and arousal >= 0.6):
+            return "crisis"
+        if (
+            risk >= 3
+            or arousal >= 0.75
+            or vad.valence_signed <= -0.45
+            or any(kw in user_input for kw in high_keywords)
+        ):
             return "high"
+        if vad.valence_signed >= 0.45 and arousal <= 0.55:
+            return "low"
         if any(word in user_input for word in ("好開心", "興奮", "開心", "謝謝")):
             return "low"
         return "medium"
@@ -436,9 +459,15 @@ class PersonaGraph:
         intensity: str,
         policies: List[str],
         trait_labels: List[str],
+        island_gains: Optional[Dict[str, float]] = None,
+        vad_guidance: str = "",
     ) -> str:
         act_line = ", ".join(
             f"{k}={activation.get(k, 0.0):.2f}" for k in ISLAND_IDS
+        )
+        gains = island_gains if isinstance(island_gains, dict) else {}
+        gain_line = ", ".join(
+            f"{k}={float(gains.get(k, 0.0)):.3f}" for k in ISLAND_IDS
         )
         policy_line = ", ".join(policies)
         identity = self.nodes.get("identity:seele")
@@ -459,27 +488,35 @@ class PersonaGraph:
                 "Normal tone: trait labels guide presence only; "
                 "do not perform every trait every sentence."
             )
-        return (
-            "PERSONA GRAPH STATE:\n"
-            f"- Identity: {name} (psychological companion, zh-HK)\n"
-            f"- Primary island: {primary_island} "
-            f"({VALUE_LABELS.get(primary_island, primary_island)})\n"
-            f"- Value islands: {value_line}\n"
-            f"- Island activation: {act_line}\n"
-            f"- Relationship stage: {stage}\n"
-            f"- Affect intensity: {intensity}\n"
-            f"- Persona traits (shell labels only, not volume dials): {traits}\n"
-            f"- Expression range: {expression_range}\n"
-            f"- Safety / tone rule: {gate_line}\n"
-            f"- Active policies: {policy_line}\n"
-            "- Hard rules: no institutional hotline/ER instructions; "
-            "presence and validation before advice; "
-            "do not skip intimacy stages; keep autobiography stable; "
-            "style must never override safety or honesty; "
-            "on narrative conflict use soft repair — never denial, "
-            "rationalization, or anger to protect persona.\n"
-            f"- Graph version: {GRAPH_VERSION}"
-        )
+        parts = [
+            "PERSONA GRAPH STATE:",
+            f"- Identity: {name} (psychological companion, zh-HK)",
+            (
+                f"- Primary island: {primary_island} "
+                f"({VALUE_LABELS.get(primary_island, primary_island)})"
+            ),
+            f"- Value islands: {value_line}",
+            f"- Island activation: {act_line}",
+            f"- Island gains (VAD bridge): {gain_line}",
+            f"- Relationship stage: {stage}",
+            f"- Affect intensity: {intensity}",
+            f"- Persona traits (shell labels only, not volume dials): {traits}",
+            f"- Expression range: {expression_range}",
+            f"- Safety / tone rule: {gate_line}",
+            f"- Active policies: {policy_line}",
+            (
+                "- Hard rules: no institutional hotline/ER instructions; "
+                "presence and validation before advice; "
+                "do not skip intimacy stages; keep autobiography stable; "
+                "style must never override safety or honesty; "
+                "on narrative conflict use soft repair — never denial, "
+                "rationalization, or anger to protect persona."
+            ),
+            f"- Graph version: {GRAPH_VERSION}",
+        ]
+        if vad_guidance:
+            parts.append(vad_guidance)
+        return "\n".join(parts)
 
     def export_topology(self) -> Dict[str, Any]:
         return {

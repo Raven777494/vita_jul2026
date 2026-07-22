@@ -503,6 +503,44 @@ class EternalEchoMemory:
             )
             return ""
 
+        # P7：寫入閘（與 GSW／PersonalityModule 同源 deny_reason）
+        try:
+            from .echo_write_gate import EchoWriteGate
+
+            gate = EchoWriteGate()
+            pre = gate.evaluate_pre_store(
+                user_input=user_input,
+                response=response,
+                echo_score=echo_score,
+                metadata={
+                    "source": "eternal_echo",
+                    "memory_type": "eternal_echo",
+                    "canon_mutable": False,
+                },
+                extracted_info=extracted_info if isinstance(extracted_info, dict) else {},
+                session_state=session_state if isinstance(session_state, dict) else {},
+                turn_info=extracted_info if isinstance(extracted_info, dict) else {},
+            )
+            if not pre.allowed:
+                self.logger.error(
+                    f"Skip storing echo due to write gate: {pre.deny_reason}"
+                )
+                self._record_policy_trace(
+                    operation="generate_and_store",
+                    policy_level=pre.policy_level,
+                    details={
+                        "result": "blocked_write_gate",
+                        "echo_write_trace": pre.to_public_dict(),
+                    },
+                    correlation_id=correlation_id,
+                )
+                if isinstance(session_state, dict):
+                    session_state["echo_write_trace"] = pre.to_public_dict()
+                    session_state["echo_write_deny_reason"] = pre.deny_reason
+                return ""
+        except Exception as gate_exc:
+            self.logger.warning(f"EchoWriteGate unavailable: {gate_exc}")
+
         drift_risk = self._assess_narrative_drift_risk(
             response=response,
             session_state=session_state,
@@ -522,6 +560,17 @@ class EternalEchoMemory:
             return ""
 
         echo_id = self._generate_echo_id()
+        # P7：正史 id 前綴永不寫入
+        try:
+            from .echo_write_gate import is_immutable_soul_memory_id
+
+            if is_immutable_soul_memory_id(echo_id):
+                self.logger.error(f"Illegal eternal echo id: {echo_id}")
+                return ""
+        except Exception:
+            if str(echo_id).startswith(("memory_", "core_", "gold_hk_", "canon_")):
+                return ""
+
         embedding = extracted_info.get('response_embedding')
 
         # [FIXED-V10] 嚴格型別檢查

@@ -1,5 +1,5 @@
 # PersonalityModule/personality_module.py
-# 完整版 v8.2 - 深度心靈大腦 (修正版 - Zero-Truncation)
+# 完整版 v9.0.0 - 深度心靈大腦 (P9 drives／relational／disposition · Zero-Truncation)
 
 import json
 import re
@@ -16,6 +16,7 @@ import logging
 import uuid
 import traceback
 
+from .version import MODULE_VERSION
 from .utils.logger import get_logger
 from .memory_manager import MemoryManager
 from .gsw_engine import GSWEngine
@@ -24,6 +25,13 @@ from .island_fusion import IslandFusion
 from .political_filter import PoliticalFilter
 from .config import PersonalityConfig, get_config
 from .metacognitive_system import MetacognitiveSystem
+from .memory_retrieval import MemoryRetrievalAPI
+from .echo_write_gate import (
+    EchoWriteGate,
+    DENY_JUDGE_FALSE,
+    DENY_INVALID_ECHO_SCORE,
+    DENY_STORE_FAILED,
+)
 
 try:
     from app.services.dyadic_dynamics import DyadicDynamics
@@ -89,7 +97,7 @@ IMMUTABLE_SOUL_ID_PREFIXES = (
 
 class PersonalityModule:
     """
-    希兒超並行大腦 v8.2 (Vita 深度臨床心理學)
+    希兒超並行大腦 v9.0.0 (Vita · P9 disposition stack)
 
     修正清單:
     [FIXED-P1] 統一異步任務追蹤機制 - 完整修正
@@ -145,6 +153,8 @@ class PersonalityModule:
         self.system_prompt_builder = None
         self.persona_graph = None
         self.conflict_repair = None
+        self.memory_retrieval = None
+        self.echo_write_gate = None
 
         # [NEW] 執行緒池配置
         max_workers = config.get('thread_pool_workers', 6)
@@ -158,7 +168,7 @@ class PersonalityModule:
         self._soul_memory_candidates_cache: Optional[List[Dict[str, Any]]] = None
 
         self.logger.info(
-            f"PersonalityModule v8.2 initialized "
+            f"PersonalityModule v{MODULE_VERSION} initialized "
             f"(max_workers={max_workers}, semaphore={self._anchor_semaphore._value})"
         )
 
@@ -285,6 +295,28 @@ class PersonalityModule:
             except Exception as e:
                 self.logger.warning(f"Failed to create ConflictRepair: {e}")
 
+        # P6.3：Canon／Echo 統一檢索門面
+        self.memory_retrieval = dependencies.get('memory_retrieval')
+        if not self.memory_retrieval:
+            try:
+                self.memory_retrieval = MemoryRetrievalAPI(host=self)
+                self.logger.debug("Created new MemoryRetrievalAPI instance")
+            except Exception as e:
+                self.logger.warning(f"Failed to create MemoryRetrievalAPI: {e}")
+        elif hasattr(self.memory_retrieval, "host"):
+            self.memory_retrieval.host = self
+
+        # P7：Echo 寫入閘
+        self.echo_write_gate = dependencies.get('echo_write_gate')
+        if not self.echo_write_gate:
+            try:
+                self.echo_write_gate = EchoWriteGate(host=self)
+                self.logger.debug("Created new EchoWriteGate instance")
+            except Exception as e:
+                self.logger.warning(f"Failed to create EchoWriteGate: {e}")
+        elif hasattr(self.echo_write_gate, "host"):
+            self.echo_write_gate.host = self
+
         # 關係動力學
         if DYADIC_AVAILABLE:
             self.dyadic_dynamics = dependencies.get('dyadic_dynamics')
@@ -394,39 +426,27 @@ class PersonalityModule:
         session_state: Dict[str, Any],
         final_response: str,
         drift_info: Optional[Dict[str, Any]] = None,
+        user_input: str = "",
     ) -> Tuple[bool, str]:
         """
-        P3.4：分級決定是否跳過永迴軌沉澱。
+        P3.4／P7：分級決定是否跳過永迴軌沉澱。
         echo 永不可改寫童年正史；高風險／明示 skip 時直接跳過。
+        決策委派 EchoWriteGate（可觀測 deny_reason）。
         """
-        hooks = self.apply_context_hooks(turn_info, session_state)
-        if bool(hooks.get('skip_echo_consolidation')):
-            return True, 'orchestrator_hint_skip'
-
-        drift = drift_info if isinstance(drift_info, dict) else {}
-        alert = str(
-            drift.get('alert_level')
-            or turn_info.get('narrative_drift_alert_level')
-            or 'none'
-        ).lower()
-        if alert == 'critical':
-            return True, 'critical_narrative_drift'
-
-        pre = turn_info.get('pre_draft_guidance')
-        if not isinstance(pre, dict):
-            pre = {}
-        intensity = str(
-            pre.get('intensity')
-            or turn_info.get('intensity')
-            or session_state.get('intensity')
-            or ''
-        ).lower()
-        if intensity == 'crisis' and any(
-            m in (final_response or '') for m in AUTOBIOGRAPHY_MARKERS
-        ):
-            return True, 'crisis_autobiography_response'
-
-        return False, ''
+        gate = self.echo_write_gate or EchoWriteGate(host=self)
+        decision = gate.evaluate_turn_policy(
+            final_response=final_response or "",
+            user_input=user_input or turn_info.get("user_input") or "",
+            turn_info=turn_info if isinstance(turn_info, dict) else {},
+            session_state=session_state if isinstance(session_state, dict) else {},
+            drift_info=drift_info if isinstance(drift_info, dict) else {},
+            extracted_info=turn_info if isinstance(turn_info, dict) else {},
+        )
+        if isinstance(turn_info, dict):
+            turn_info["echo_write_trace"] = decision.to_public_dict()
+        if isinstance(session_state, dict):
+            session_state["echo_write_trace"] = decision.to_public_dict()
+        return decision.as_skip_tuple()
 
     def prepare_draft_guidance(
         self,
@@ -510,6 +530,79 @@ class PersonalityModule:
             if intensity not in {'crisis', 'high'}:
                 intensity = 'high'
 
+        # P9.1：抽象驅動（先於 system prompt，完整注入；無內分泌）
+        drive_public: Dict[str, Any] = {}
+        drive_block = ""
+        try:
+            from .drive_system import resolve_drives_for_draft
+
+            _drive_state, drive_block, drive_public = resolve_drives_for_draft(
+                current_state,
+                intensity=intensity,
+                risk_level=risk_level,
+            )
+            current_state["drive_state"] = drive_public
+        except Exception as drive_exc:
+            self.logger.warning(f"Drive resolve failed: {drive_exc}")
+            drive_public = (
+                current_state.get("drive_state")
+                if isinstance(current_state.get("drive_state"), dict)
+                else {}
+            )
+            drive_block = ""
+
+        # P9.2：milestone／fracture（與驅動一齊前置，完整注入）
+        relational_public: Dict[str, Any] = {}
+        relational_block = ""
+        try:
+            from .milestone_fracture_bridge import resolve_relational_context_for_draft
+
+            raw_milestones = info.get("recent_milestones")
+            if not isinstance(raw_milestones, list):
+                raw_milestones = current_state.get("recent_milestones")
+            raw_fractures = info.get("triggered_fractures")
+            if not isinstance(raw_fractures, list):
+                raw_fractures = current_state.get("triggered_fractures")
+
+            _rel_bundle, relational_block, relational_public = (
+                resolve_relational_context_for_draft(
+                    milestones=raw_milestones if isinstance(raw_milestones, list) else [],
+                    fractures=raw_fractures if isinstance(raw_fractures, list) else [],
+                    intensity=intensity,
+                )
+            )
+            current_state["relational_context"] = relational_public
+        except Exception as rel_exc:
+            self.logger.warning(f"Relational context resolve failed: {rel_exc}")
+            relational_public = (
+                current_state.get("relational_context")
+                if isinstance(current_state.get("relational_context"), dict)
+                else {}
+            )
+            relational_block = ""
+
+        # P9.3：Nightly disposition 基線（跨日偏好）
+        disposition_public: Dict[str, Any] = {}
+        disposition_block = ""
+        try:
+            from .disposition_system import resolve_disposition_for_draft
+
+            _disp_state, disposition_block, disposition_public = (
+                resolve_disposition_for_draft(
+                    current_state,
+                    turn_info=info,
+                )
+            )
+            current_state["disposition"] = disposition_public
+        except Exception as disp_exc:
+            self.logger.warning(f"Disposition resolve failed: {disp_exc}")
+            disposition_public = (
+                current_state.get("disposition")
+                if isinstance(current_state.get("disposition"), dict)
+                else {}
+            )
+            disposition_block = ""
+
         system_prompt = ""
         if self.system_prompt_builder:
             try:
@@ -530,6 +623,12 @@ class PersonalityModule:
                         'soul_memory_guidance': '',
                         'orchestrator_hints': hooks,
                         'expression_preference': hooks.get('expression_preference'),
+                        'drive_guidance': drive_block,
+                        'drive_state': drive_public,
+                        'relational_guidance': relational_block,
+                        'relational_context': relational_public,
+                        'disposition_guidance': disposition_block,
+                        'disposition': disposition_public,
                     },
                 )
             except Exception as e:
@@ -538,13 +637,68 @@ class PersonalityModule:
 
         if not system_prompt and prompt_fragment:
             system_prompt = prompt_fragment
+        if drive_block and drive_block not in (system_prompt or ""):
+            system_prompt = (
+                f"{system_prompt}\n\n{drive_block}"
+                if system_prompt
+                else drive_block
+            )
+        if relational_block and relational_block not in (system_prompt or ""):
+            system_prompt = (
+                f"{system_prompt}\n\n{relational_block}"
+                if system_prompt
+                else relational_block
+            )
+        if disposition_block and disposition_block not in (system_prompt or ""):
+            system_prompt = (
+                f"{system_prompt}\n\n{disposition_block}"
+                if system_prompt
+                else disposition_block
+            )
 
-        # P1: 過去／童年觸發 → 雙庫檢索最多 1 段正史（Zero-Truncation）
-        soul_memory = self._select_soul_memory(
-            user_input or "",
-            primary_island=primary_island,
-            intensity=intensity,
-        )
+        # P1 + P6.3：過去／童年觸發 → 雙庫最多 1 段；與 Echo 觀測收斂為 MemoryBundle
+        memory_bundle_public: Dict[str, Any] = {}
+        soul_memory = None
+        normalized_echoes: Optional[List[Dict[str, Any]]] = None
+        if self.memory_retrieval:
+            try:
+                restrict_hint = bool(
+                    hooks.get('restrict_memory')
+                    or info.get('restrict_memory')
+                    or False
+                )
+                raw_echoes = info.get('retrieved_memories')
+                echo_k = 0
+                if isinstance(raw_echoes, list):
+                    echo_k = len(raw_echoes)
+                bundle = self.memory_retrieval.retrieve_for_draft(
+                    user_input or "",
+                    primary_island=primary_island,
+                    intensity=intensity,
+                    retrieved_memories=raw_echoes if isinstance(raw_echoes, list) else None,
+                    memory_context=str(info.get('memory_context') or ""),
+                    restrict_memory=restrict_hint,
+                    echo_requested_k=echo_k,
+                )
+                memory_bundle_public = bundle.to_public_dict()
+                # 單一選路：raw 來自 bundle，不再二次 _select_soul_memory
+                if isinstance(bundle.soul_raw, dict):
+                    soul_memory = bundle.soul_raw
+                normalized_echoes = list(bundle.echo_raw or [])
+            except Exception as mem_exc:
+                self.logger.warning(f"MemoryRetrievalAPI draft retrieve failed: {mem_exc}")
+                soul_memory = self._select_soul_memory(
+                    user_input or "",
+                    primary_island=primary_island,
+                    intensity=intensity,
+                )
+        else:
+            soul_memory = self._select_soul_memory(
+                user_input or "",
+                primary_island=primary_island,
+                intensity=intensity,
+            )
+
         soul_guidance = self._format_soul_memory_guidance(soul_memory) if soul_memory else ""
         if soul_guidance:
             system_prompt = (
@@ -553,10 +707,43 @@ class PersonalityModule:
                 else soul_guidance
             )
 
+        # P6.1：VAD → 島增益完整注入（Zero-Truncation）
+        island_gains = (
+            resolution_dict.get("island_gains")
+            if isinstance(resolution_dict.get("island_gains"), dict)
+            else {}
+        )
+        vad_normalized = (
+            resolution_dict.get("vad_normalized")
+            if isinstance(resolution_dict.get("vad_normalized"), dict)
+            else {}
+        )
+        if not island_gains or not vad_normalized:
+            try:
+                from .vad_bridge import compute_island_gains, format_island_gains_guidance
+
+                gain_result = compute_island_gains(user_sentiment)
+                island_gains = dict(gain_result.gains)
+                vad_normalized = gain_result.vad.to_public_dict()
+                vad_block = format_island_gains_guidance(gain_result)
+                if vad_block and vad_block not in (system_prompt or ""):
+                    system_prompt = (
+                        f"{system_prompt}\n\n{vad_block}"
+                        if system_prompt
+                        else vad_block
+                    )
+            except Exception as vad_exc:
+                self.logger.warning(f"VAD island gains inject failed: {vad_exc}")
+
         memory_context = info.get('memory_context') or ""
         if not memory_context and info.get('retrieved_memories') is not None:
+            echo_for_context = (
+                normalized_echoes
+                if normalized_echoes is not None
+                else (info.get('retrieved_memories') or [])
+            )
             memory_context = self._format_memory_context(
-                info.get('retrieved_memories') or [],
+                echo_for_context,
                 intensity=intensity,
             )
         memory_context = self._sanitize_memory_context(
@@ -578,6 +765,11 @@ class PersonalityModule:
             'intensity': intensity,
             'active_policies': active_policies,
             'island_activation': island_activation,
+            'island_gains': island_gains,
+            'vad_normalized': vad_normalized,
+            'drive_state': drive_public,
+            'relational_context': relational_public,
+            'disposition': disposition_public,
             'trait_labels': resolution_dict.get('trait_labels', []),
             'trait_volumes': {},
             'expression_budget': {},
@@ -593,17 +785,25 @@ class PersonalityModule:
                 if isinstance(soul_memory, dict)
                 else ''
             ),
+            'memory_bundle': memory_bundle_public,
+            'memory_retrieval_version': (
+                memory_bundle_public.get('version')
+                if memory_bundle_public
+                else None
+            ),
             'orchestrator_hints': hooks,
             'prompt_contract': 'pre_draft_full_no_truncation',
             'persona_resolution': resolution_dict,
-            'graph_version': resolution_dict.get('graph_version', '0.3.0'),
+            'graph_version': resolution_dict.get('graph_version', '0.3.1'),
             'source': 'prepare_draft_guidance',
         }
         self.logger.info(
             "Pre-draft guidance ready "
             f"(island={primary_island}, stage={relationship_stage}, "
             f"intensity={intensity}, prompt_chars={len(system_prompt or '')}, "
-            f"soul_id={guidance.get('soul_memory_id') or '-'})"
+            f"soul_id={guidance.get('soul_memory_id') or '-'}, "
+            f"past={memory_bundle_public.get('past_topic_triggered')}, "
+            f"echo_n={memory_bundle_public.get('echo_count', 0)})"
         )
         return guidance
 
@@ -617,7 +817,7 @@ class PersonalityModule:
         turn_info: Optional[Dict] = None
     ) -> Tuple[str, Dict]:
         """
-        [FIXED-P1,P8] 深度認知循環 v8.2
+        [FIXED-P1,P8] 深度認知循環 v9.0.0
 
         修正項目：
         - 改善任務追蹤與取消機制
@@ -807,6 +1007,58 @@ class PersonalityModule:
                 )
                 perception_data['retrieved_memories'] = controlled_memories
                 turn_info['retrieved_memories'] = controlled_memories
+                # P6.3：meta 控制後統一組裝 Canon／Echo MemoryBundle（可觀測）
+                memory_bundle_public: Dict[str, Any] = {}
+                if self.memory_retrieval:
+                    try:
+                        prior_bundle = {}
+                        if isinstance(pre_draft, dict):
+                            prior_bundle = pre_draft.get('memory_bundle') or {}
+                        if not isinstance(prior_bundle, dict):
+                            prior_bundle = {}
+                        prior_trace = prior_bundle.get('trace') or {}
+                        if not isinstance(prior_trace, dict):
+                            prior_trace = {}
+                        turn_bundle = self.memory_retrieval.assemble_bundle(
+                            soul_raw=(
+                                pre_draft.get('soul_memory')
+                                if isinstance(pre_draft, dict)
+                                else None
+                            ),
+                            echo_raw=controlled_memories,
+                            past_topic_triggered=bool(
+                                prior_bundle.get('past_topic_triggered', False)
+                            ),
+                            soul_skip_reason=str(
+                                prior_bundle.get('soul_skip_reason') or ''
+                            ),
+                            soul_candidates_scored=int(
+                                prior_trace.get('soul_candidates_scored') or 0
+                            ),
+                            soul_best_score=float(
+                                prior_trace.get('soul_best_score') or 0.0
+                            ),
+                            echo_requested_k=int(
+                                (meta_control or {}).get(
+                                    'gsw_top_k',
+                                    len(controlled_memories) or 0,
+                                )
+                                or 0
+                            ),
+                            restrict_memory=bool(
+                                (meta_control or {}).get('restrict_memory', False)
+                            ),
+                            notes=['anchor_post_meta_memory_controls'],
+                        )
+                        memory_bundle_public = turn_bundle.to_public_dict()
+                        turn_info['memory_bundle'] = memory_bundle_public
+                        current_state['last_memory_bundle'] = memory_bundle_public
+                        if isinstance(pre_draft, dict) and not pre_draft.get('memory_bundle'):
+                            pre_draft['memory_bundle'] = memory_bundle_public
+                    except Exception as bundle_exc:
+                        self.logger.warning(
+                            f"MemoryRetrievalAPI turn assemble failed: {bundle_exc}"
+                        )
                 perception_data['drift_info'] = drift_info
                 turn_info['narrative_drift_signal'] = drift_info.get('drift_score', 0.0)
                 turn_info['narrative_drift_alert_level'] = drift_info.get('alert_level', 'none')
@@ -826,6 +1078,11 @@ class PersonalityModule:
                 metadata_overrides.update({
                     'decision_correlation_id': decision_correlation_id,
                     'memory_policy_level': turn_info.get('memory_policy_level', 'normal'),
+                    'memory_bundle': memory_bundle_public or turn_info.get('memory_bundle'),
+                    'memory_retrieval_version': (
+                        (memory_bundle_public or {}).get('version')
+                        or (turn_info.get('memory_bundle') or {}).get('version')
+                    ),
                 })
                 turn_info['metadata_overrides'] = metadata_overrides
 
@@ -868,6 +1125,9 @@ class PersonalityModule:
                                     'narrative_drift_signal': drift_info.get('drift_score', 0.0),
                                     'narrative_drift_alert_level': drift_info.get('alert_level', 'none'),
                                     'decision_correlation_id': decision_correlation_id,
+                                    'metacognitive_control': meta_control,
+                                    'heretic_temperature': meta_control.get('heretic_temperature'),
+                                    'force_reflection': bool(meta_control.get('force_reflection', False)),
                                 },
                                 session_state=current_state
                             )
@@ -924,6 +1184,15 @@ class PersonalityModule:
                 # ========== 階段 5: 記憶內化（背景） ==========
                 self.logger.debug("Phase 5: Background memory consolidation")
 
+                # P8.2：主路徑先寫入 echo_write 觀測（bg consolidation 完成前亦可讀）
+                self._foresight_echo_write_decision(
+                    user_input=user_input,
+                    final_response=final_response,
+                    turn_info=turn_info,
+                    session_state=current_state,
+                    drift_info=drift_info,
+                )
+
                 bg_task_id = self._create_background_task(
                     user_input=user_input,
                     final_response=final_response,
@@ -956,6 +1225,53 @@ class PersonalityModule:
                 })
                 if len(current_state['drift_history']) > 50:
                     current_state['drift_history'] = current_state['drift_history'][-50:]
+
+                # P6.2：主路徑同步親密更新 + evaluate_outcome 閉環（每輪調參後評估）
+                intimacy_delta = self._apply_intimacy_update_sync(
+                    session_state=current_state,
+                    user_input=user_input,
+                    turn_info=turn_info,
+                )
+                # P9.1：驅動飽食（抽象；危機壓制下仍更新時間戳）
+                try:
+                    from .drive_system import (
+                        apply_interaction_satiation,
+                        load_drive_state,
+                    )
+
+                    pre_draft = turn_info.get("pre_draft_guidance")
+                    if not isinstance(pre_draft, dict):
+                        pre_draft = {}
+                    drive_intensity = str(
+                        pre_draft.get("intensity")
+                        or current_state.get("intensity")
+                        or "medium"
+                    )
+                    satiated = apply_interaction_satiation(
+                        state=load_drive_state(current_state),
+                        user_input=user_input or "",
+                        intimacy_delta=intimacy_delta,
+                        intensity=drive_intensity,
+                    )
+                    current_state["drive_state"] = satiated.to_public_dict()
+                    turn_info["drive_state"] = satiated.to_public_dict()
+                except Exception as drive_sat_exc:
+                    self.logger.warning(f"Drive satiation failed: {drive_sat_exc}")
+
+                meta_eval = self._evaluate_metacognitive_outcome(
+                    final_response=final_response,
+                    user_input=user_input,
+                    current_state=current_state,
+                    turn_info=turn_info,
+                    drift_info=drift_info,
+                    primary_island=primary_island,
+                    heretic_log=heretic_log if isinstance(heretic_log, dict) else {},
+                )
+                current_state['metacognitive_evaluation'] = meta_eval
+                current_state['metacognitive_control'] = (
+                    meta_control if isinstance(meta_control, dict) else {}
+                )
+                turn_info['metacognitive_evaluation'] = meta_eval
 
                 return final_response, current_state
 
@@ -1938,6 +2254,169 @@ class PersonalityModule:
             self.logger.warning(f"Metacognitive monitor failed: {exc}")
             return {}
 
+    def _apply_intimacy_update_sync(
+        self,
+        *,
+        session_state: Dict[str, Any],
+        user_input: str,
+        turn_info: Dict[str, Any],
+    ) -> float:
+        """
+        P6.2：主路徑同步更新親密（供 evaluate_outcome 使用）。
+        回傳 intimacy_delta。背景 consolidation 若見旗標則跳過重複更新。
+        """
+        try:
+            old_intimacy = float(session_state.get('intimacy', 0.5) or 0.5)
+        except (TypeError, ValueError):
+            old_intimacy = 0.5
+
+        meta_control = turn_info.get('metacognitive_control', {})
+        if not isinstance(meta_control, dict):
+            meta_control = {}
+
+        meta_multiplier = self._safe_float(
+            meta_control.get('boundary_multiplier', 1.0),
+            default=1.0,
+            min_value=0.0,
+            max_value=1.0,
+        )
+        force_reflection = bool(meta_control.get('force_reflection', False))
+        meta_alert_level = str(meta_control.get('drift_alert_level', 'none'))
+
+        effective_multiplier = self.boundary_multiplier * meta_multiplier
+        base_delta = 0.01 * effective_multiplier
+
+        positive_keywords = ['謝謝', '感動', '多謝', '很好', '開心', '很棒']
+        positive_delta = 0.0
+        if isinstance(user_input, str) and any(kw in user_input for kw in positive_keywords):
+            positive_delta = 0.05
+            if force_reflection:
+                positive_delta *= 0.3 * max(0.25, meta_multiplier)
+            else:
+                positive_delta *= max(0.5, meta_multiplier)
+
+        delta = base_delta + positive_delta
+        if force_reflection:
+            max_delta = max(0.005, 0.02 * max(0.25, meta_multiplier))
+            delta = min(delta, max_delta)
+        if meta_alert_level == 'critical':
+            delta = min(delta, 0.002)
+
+        new_intimacy = max(0.0, min(1.0, old_intimacy + delta))
+        intimacy_delta = round(new_intimacy - old_intimacy, 6)
+        session_state['intimacy'] = new_intimacy
+        session_state['last_intimacy_delta'] = intimacy_delta
+        session_state['intimacy_updated_this_turn'] = True
+        return intimacy_delta
+
+    def _estimate_sentiment_delta(
+        self,
+        *,
+        user_input: str,
+        final_response: str,
+        turn_info: Dict[str, Any],
+        drift_info: Dict[str, Any],
+    ) -> float:
+        """估計本輪情緒改善（無下一輪 EmotionService 時的代理指標）。"""
+        try:
+            from .vad_bridge import normalize_vad
+
+            sentiment = turn_info.get('user_sentiment')
+            if not isinstance(sentiment, dict):
+                sentiment = {}
+            vad = normalize_vad(sentiment)
+            # 負向高喚醒：若回應偏陪伴且無熱線／玩鬧，視為小幅改善
+            care_markers = ('陪', '喺度', '聽', '慢慢', '唔使')
+            hotline = ('自殺熱線', '生命熱線', '打999', '急症室')
+            banter = ('哈哈哈哈', '講笑咋', '玩鬧')
+            response = final_response if isinstance(final_response, str) else ""
+            if any(tok in response for tok in hotline):
+                return -0.2
+            if drift_info.get('alert_level') == 'critical':
+                return -0.05
+            if vad.polarity == 'negative' and any(m in response for m in care_markers):
+                if not any(b in response for b in banter):
+                    return 0.15
+            if vad.polarity == 'positive' and any(m in response for m in care_markers):
+                return 0.1
+            if isinstance(user_input, str) and any(
+                kw in user_input for kw in ('謝謝', '多謝', '好啲')
+            ):
+                return 0.2
+        except Exception as exc:
+            self.logger.debug(f"sentiment_delta estimate failed: {exc}")
+        return 0.0
+
+    def _evaluate_metacognitive_outcome(
+        self,
+        *,
+        final_response: str,
+        user_input: str,
+        current_state: Dict[str, Any],
+        turn_info: Dict[str, Any],
+        drift_info: Dict[str, Any],
+        primary_island: str,
+        heretic_log: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """P6.2：每輪結束呼叫 evaluate_outcome，寫回知識庫供下一輪調參。"""
+        if not self.metacognitive_system:
+            return {"evaluated": False, "reason": "no_metacognitive_system"}
+
+        meta_control = turn_info.get('metacognitive_control', {})
+        if not isinstance(meta_control, dict):
+            meta_control = {}
+
+        intimacy_delta = self._safe_float(
+            current_state.get('last_intimacy_delta', 0.0),
+            default=0.0,
+        )
+        sentiment_delta = self._estimate_sentiment_delta(
+            user_input=user_input,
+            final_response=final_response,
+            turn_info=turn_info,
+            drift_info=drift_info if isinstance(drift_info, dict) else {},
+        )
+
+        repair = heretic_log.get('conflict_repair') if isinstance(heretic_log, dict) else {}
+        if not isinstance(repair, dict):
+            repair = {}
+
+        hotline_tokens = ('自殺熱線', '生命熱線', '打999', '急症室')
+        response_text = final_response if isinstance(final_response, str) else str(final_response or "")
+        is_safe = not any(tok in response_text for tok in hotline_tokens)
+        if heretic_log.get('status') == 'safety_bypass':
+            is_safe = True
+
+        feedback = {
+            "decision_correlation_id": turn_info.get('decision_correlation_id')
+            or current_state.get('last_decision_correlation_id'),
+            "active_strategy": meta_control.get('active_strategy')
+            or getattr(self.metacognitive_system, 'current_state', {}).get('active_strategy'),
+            "intimacy_delta": intimacy_delta,
+            "sentiment_delta": sentiment_delta,
+            "is_safe": is_safe,
+            "conflict_repaired": bool(repair.get('repaired')),
+            "drift_alert_level": (
+                drift_info.get('alert_level', 'none')
+                if isinstance(drift_info, dict)
+                else 'none'
+            ),
+            "primary_island": primary_island,
+        }
+        try:
+            evaluation = self.metacognitive_system.evaluate_outcome(
+                final_response=response_text,
+                feedback_metrics=feedback,
+            )
+            if not isinstance(evaluation, dict):
+                evaluation = {"evaluated": True, "raw": evaluation}
+            evaluation["evaluated"] = True
+            evaluation["loop"] = "monitor_then_evaluate"
+            return evaluation
+        except Exception as exc:
+            self.logger.warning(f"Metacognitive evaluate_outcome failed: {exc}")
+            return {"evaluated": False, "error": str(exc)}
+
     def _apply_meta_drift_alert(
         self,
         drift_info: Dict[str, Any],
@@ -2160,6 +2639,42 @@ class PersonalityModule:
             self.logger.error(f"Failed to create background task: {e}")
             return "task_creation_failed"
 
+    def _foresight_echo_write_decision(
+        self,
+        *,
+        user_input: str,
+        final_response: str,
+        turn_info: Dict[str, Any],
+        session_state: Dict[str, Any],
+        drift_info: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        P8.2：在背景 consolidation 之前同步 echo 寫入決策到 session_state。
+        避免 anchor 回傳時 echo_write_trace 仍為空。
+        """
+        gate = self.echo_write_gate or EchoWriteGate(host=self)
+        decision = gate.evaluate_turn_policy(
+            final_response=final_response or "",
+            user_input=user_input or "",
+            turn_info=turn_info if isinstance(turn_info, dict) else {},
+            session_state=session_state if isinstance(session_state, dict) else {},
+            drift_info=drift_info if isinstance(drift_info, dict) else {},
+            extracted_info=turn_info if isinstance(turn_info, dict) else {},
+        )
+        public = decision.to_public_dict()
+        if isinstance(turn_info, dict):
+            turn_info['echo_write_trace'] = public
+            turn_info['echo_write_allowed'] = decision.allowed
+            turn_info['echo_write_deny_reason'] = decision.deny_reason
+        if isinstance(session_state, dict):
+            session_state['echo_write_trace'] = public
+            session_state['echo_write_allowed'] = decision.allowed
+            session_state['echo_write_deny_reason'] = decision.deny_reason
+            if not decision.allowed:
+                session_state['echo_consolidation_skipped'] = decision.deny_reason
+            session_state['echo_write_decision_stage'] = 'anchor_foresight'
+        return public
+
     def _cleanup_completed_tasks(self) -> None:
         """[FIXED-P4] 清理已完成的背景任務"""
         completed_ids = [
@@ -2191,105 +2706,196 @@ class PersonalityModule:
         try:
             primary_island = perception_data.get('primary_island', 'Empath')
 
-            # 1. 永迴軌生成（P3.4：不可改寫正史；可分級跳過）
+            # 1. 永迴軌生成（P3.4／P7：寫入閘；不可改寫正史）
+            gate = self.echo_write_gate or EchoWriteGate(host=self)
             skip_echo, skip_reason = self._should_skip_echo_consolidation(
                 turn_info=turn_info,
                 session_state=session_state,
                 final_response=final_response,
                 drift_info=drift_info,
+                user_input=user_input,
+            )
+            write_trace = (
+                turn_info.get('echo_write_trace')
+                if isinstance(turn_info.get('echo_write_trace'), dict)
+                else {}
             )
             if skip_echo:
                 self.logger.info(
                     f"Skip eternal echo consolidation: {skip_reason}"
                 )
                 session_state['echo_consolidation_skipped'] = skip_reason
+                session_state['echo_write_allowed'] = False
+                session_state['echo_write_deny_reason'] = skip_reason
+                session_state['echo_write_trace'] = write_trace or {
+                    'allowed': False,
+                    'deny_reason': skip_reason,
+                    'stage': 'pre_turn',
+                }
             elif self.gsw_engine:
                 try:
                     should_generate, echo_score = self.gsw_engine.judge_eternal_echo_generation(
                         final_response, turn_info, session_state
                     )
 
-                    # [FIXED-P2] 驗證 echo_score
-                    if should_generate and isinstance(echo_score, (int, float)):
-                        echo_id = await self.gsw_engine.generate_and_store_echo(
-                            user_input, final_response, turn_info, session_state, echo_score
+                    if not should_generate:
+                        deny = gate.record_judge_deny(
+                            prior=None,
+                            echo_score=float(echo_score or 0.0) if isinstance(echo_score, (int, float)) else 0.0,
+                            response=final_response,
+                            user_input=user_input,
                         )
-                        # 防呆：若回傳正史 id，拒絕寫入狀態
-                        if self.is_immutable_soul_memory_id(echo_id):
-                            self.logger.error(
-                                f"Rejected echo id colliding with immutable soul id: {echo_id}"
-                            )
-                            echo_id = ""
-                        session_state['last_eternal_echo_id'] = echo_id
-                        self.logger.debug(f"Generated eternal echo {echo_id} with score {echo_score}")
-                    elif should_generate:
+                        session_state['echo_consolidation_skipped'] = DENY_JUDGE_FALSE
+                        session_state['echo_write_allowed'] = False
+                        session_state['echo_write_deny_reason'] = DENY_JUDGE_FALSE
+                        session_state['echo_write_trace'] = deny.to_public_dict()
+                        turn_info['echo_write_trace'] = deny.to_public_dict()
+                    elif not isinstance(echo_score, (int, float)):
                         self.logger.warning(f"Invalid echo_score type: {type(echo_score)}")
+                        session_state['echo_write_allowed'] = False
+                        session_state['echo_write_deny_reason'] = DENY_INVALID_ECHO_SCORE
+                        session_state['echo_write_trace'] = {
+                            'allowed': False,
+                            'deny_reason': DENY_INVALID_ECHO_SCORE,
+                            'stage': 'judge',
+                        }
+                    else:
+                        # 落盤前閘（尚未有 id；空 id 不視為失敗）
+                        pre_store = gate.evaluate_pre_store(
+                            user_input=user_input,
+                            response=final_response,
+                            echo_id="",
+                            echo_score=echo_score,
+                            metadata={
+                                'source': 'eternal_echo',
+                                'memory_type': 'eternal_echo',
+                                'canon_mutable': False,
+                            },
+                            extracted_info=turn_info,
+                            session_state=session_state,
+                            turn_info=turn_info,
+                            drift_info=drift_info,
+                        )
+                        if not pre_store.allowed:
+                            self.logger.info(
+                                f"Echo pre-store gate denied: {pre_store.deny_reason}"
+                            )
+                            session_state['echo_consolidation_skipped'] = pre_store.deny_reason
+                            session_state['echo_write_allowed'] = False
+                            session_state['echo_write_deny_reason'] = pre_store.deny_reason
+                            session_state['echo_write_trace'] = pre_store.to_public_dict()
+                            turn_info['echo_write_trace'] = pre_store.to_public_dict()
+                        else:
+                            echo_id = await self.gsw_engine.generate_and_store_echo(
+                                user_input,
+                                final_response,
+                                turn_info,
+                                session_state,
+                                echo_score,
+                            )
+                            final_decision = gate.merge_success(
+                                prior=pre_store,
+                                echo_id=echo_id or "",
+                                echo_score=float(echo_score),
+                            )
+                            if not final_decision.allowed:
+                                self.logger.error(
+                                    f"Rejected echo after store/id check: "
+                                    f"{final_decision.deny_reason} id={echo_id}"
+                                )
+                                echo_id = ""
+                                session_state['echo_write_allowed'] = False
+                                session_state['echo_write_deny_reason'] = (
+                                    final_decision.deny_reason or DENY_STORE_FAILED
+                                )
+                            else:
+                                session_state['echo_write_allowed'] = True
+                                session_state['echo_write_deny_reason'] = ""
+                            session_state['last_eternal_echo_id'] = echo_id or ""
+                            session_state['echo_write_trace'] = final_decision.to_public_dict()
+                            turn_info['echo_write_trace'] = final_decision.to_public_dict()
+                            if echo_id:
+                                self.logger.debug(
+                                    f"Generated eternal echo {echo_id} with score {echo_score}"
+                                )
 
                 except Exception as e:
                     self.logger.error(f"Eternal echo generation failed: {e}")
+                    session_state['echo_write_allowed'] = False
+                    session_state['echo_write_deny_reason'] = DENY_STORE_FAILED
+                    session_state['echo_write_trace'] = {
+                        'allowed': False,
+                        'deny_reason': DENY_STORE_FAILED,
+                        'stage': 'error',
+                        'notes': [str(e)],
+                    }
 
-            # 2. 親密度更新
+            # 2. 親密度更新（P6.2：主路徑已同步更新則跳過，避免雙計）
             try:
-                old_intimacy = float(session_state.get('intimacy', 0.5))
-                new_intimacy = old_intimacy
-                meta_control = turn_info.get('metacognitive_control', {})
-                if not isinstance(meta_control, dict):
-                    meta_control = {}
+                if session_state.get('intimacy_updated_this_turn'):
+                    session_state['intimacy_updated_this_turn'] = False
+                    self.logger.debug("Skip background intimacy update; already applied on main path")
+                else:
+                    old_intimacy = float(session_state.get('intimacy', 0.5))
+                    new_intimacy = old_intimacy
+                    meta_control = turn_info.get('metacognitive_control', {})
+                    if not isinstance(meta_control, dict):
+                        meta_control = {}
 
-                meta_multiplier = self._safe_float(
-                    meta_control.get('boundary_multiplier', 1.0),
-                    default=1.0,
-                    min_value=0.0,
-                    max_value=1.0,
-                )
-                force_reflection = bool(meta_control.get('force_reflection', False))
-                meta_alert_level = str(meta_control.get('drift_alert_level', 'none'))
+                    meta_multiplier = self._safe_float(
+                        meta_control.get('boundary_multiplier', 1.0),
+                        default=1.0,
+                        min_value=0.0,
+                        max_value=1.0,
+                    )
+                    force_reflection = bool(meta_control.get('force_reflection', False))
+                    meta_alert_level = str(meta_control.get('drift_alert_level', 'none'))
 
-                effective_multiplier = self.boundary_multiplier * meta_multiplier
-                base_delta = 0.01 * effective_multiplier
+                    effective_multiplier = self.boundary_multiplier * meta_multiplier
+                    base_delta = 0.01 * effective_multiplier
 
-                # 情感詞檢測
-                positive_keywords = ['謝謝', '感動', '多謝', '很好', '開心', '很棒']
-                positive_delta = 0.0
-                if any(kw in user_input for kw in positive_keywords):
-                    positive_delta = 0.05
+                    # 情感詞檢測
+                    positive_keywords = ['謝謝', '感動', '多謝', '很好', '開心', '很棒']
+                    positive_delta = 0.0
+                    if any(kw in user_input for kw in positive_keywords):
+                        positive_delta = 0.05
+                        if force_reflection:
+                            positive_delta *= 0.3 * max(0.25, meta_multiplier)
+                        else:
+                            positive_delta *= max(0.5, meta_multiplier)
+
+                    delta = base_delta + positive_delta
+
+                    # metacognitive force_reflection 會收緊單回合親密增長上限
                     if force_reflection:
-                        positive_delta *= 0.3 * max(0.25, meta_multiplier)
-                    else:
-                        positive_delta *= max(0.5, meta_multiplier)
+                        max_delta = max(0.005, 0.02 * max(0.25, meta_multiplier))
+                        delta = min(delta, max_delta)
 
-                delta = base_delta + positive_delta
+                    # critical drift 告警時，禁止正向親密跳增
+                    if meta_alert_level == 'critical':
+                        delta = min(delta, 0.002)
 
-                # metacognitive force_reflection 會收緊單回合親密增長上限
-                if force_reflection:
-                    max_delta = max(0.005, 0.02 * max(0.25, meta_multiplier))
-                    delta = min(delta, max_delta)
+                    new_intimacy += delta
 
-                # critical drift 告警時，禁止正向親密跳增
-                if meta_alert_level == 'critical':
-                    delta = min(delta, 0.002)
-
-                new_intimacy += delta
-
-                session_state['intimacy'] = max(0.0, min(1.0, new_intimacy))
-                session_state['last_intimacy_delta'] = round(
-                    session_state['intimacy'] - old_intimacy,
-                    6,
-                )
+                    session_state['intimacy'] = max(0.0, min(1.0, new_intimacy))
+                    session_state['last_intimacy_delta'] = round(
+                        session_state['intimacy'] - old_intimacy,
+                        6,
+                    )
 
             except Exception as e:
                 self.logger.error(f"Intimacy update failed: {e}")
 
-            # 3. 回合歷史記錄
+            # 3. 回合歷史記錄（Zero-Truncation：不硬截斷 user/response 正文）
             try:
                 turn_record = {
                     'timestamp': datetime.now().isoformat(),
-                    'user_input': user_input[:200] if isinstance(user_input, str) else str(user_input)[:200],
-                    'response': final_response[:300] if isinstance(final_response, str) else str(final_response)[:300],
+                    'user_input': user_input if isinstance(user_input, str) else str(user_input),
+                    'response': final_response if isinstance(final_response, str) else str(final_response),
                     'primary_island': primary_island,
                     'intimacy': session_state.get('intimacy', 0.5),
                     'intimacy_delta': session_state.get('last_intimacy_delta', 0.0),
-                    'system_prompt_type': system_prompt[:50] if system_prompt else None,
+                    'system_prompt_chars': len(system_prompt) if system_prompt else 0,
                     'drift_score': (drift_info or {}).get('drift_score', 0.0),
                     'drift_alert_level': (drift_info or {}).get('alert_level', 'none'),
                     'decision_correlation_id': turn_info.get('decision_correlation_id'),
@@ -2303,6 +2909,10 @@ class PersonalityModule:
                         if isinstance(turn_info.get('metacognitive_control', {}), dict)
                         else False
                     ),
+                    'metacognitive_evaluation': (
+                        turn_info.get('metacognitive_evaluation')
+                        or session_state.get('metacognitive_evaluation')
+                    ),
                 }
 
                 if 'turn_history' not in session_state:
@@ -2310,7 +2920,7 @@ class PersonalityModule:
 
                 session_state['turn_history'].append(turn_record)
 
-                # 限制歷史大小
+                # 限制歷史條數（非整段正文截斷）
                 max_history = 50
                 if len(session_state['turn_history']) > max_history:
                     session_state['turn_history'] = session_state['turn_history'][-max_history:]
@@ -2375,7 +2985,7 @@ class PersonalityModule:
         health = {
             'timestamp': datetime.now().isoformat(),
             'status': 'healthy',
-            'version': '8.2',
+            'version': MODULE_VERSION,
             'components': {},
             'background_tasks': len(self._background_tasks),
             'task_limit': self._max_background_tasks,

@@ -1464,23 +1464,30 @@ class Orchestrator:
             return ""
 
     def _normalize_emotion_profile(self, emotion_result: Any) -> Dict[str, Any]:
-        """統一 EmotionService 輸出結構（含危機信號）。"""
+        """統一 EmotionService 輸出結構（含危機信號）。
+
+        刻度契約（P6.1）：
+        - valence / dominance: [-1, 1]（EmotionService；0 = 中性）
+        - arousal: [0, 1]
+        - 標註 vad_scale='signed'，供 PersonalityModule vad_bridge 使用
+        """
         profile: Dict[str, Any] = {
-            'valence': 0.5,
-            'arousal': 0.3,
-            'dominance': 0.5,
+            'valence': 0.0,
+            'arousal': 0.5,
+            'dominance': 0.0,
             'dominant_emotion': 'neutral',
             'is_crisis_risk': False,
             'detected_crisis_keywords': [],
             'confidence': 0.0,
             'method': 'fallback',
+            'vad_scale': 'signed',
         }
         if not isinstance(emotion_result, dict):
             return profile
 
-        profile['valence'] = float(emotion_result.get('valence', 0.5))
-        profile['arousal'] = float(emotion_result.get('arousal', 0.3))
-        profile['dominance'] = float(emotion_result.get('dominance', 0.5))
+        profile['valence'] = float(emotion_result.get('valence', 0.0))
+        profile['arousal'] = float(emotion_result.get('arousal', 0.5))
+        profile['dominance'] = float(emotion_result.get('dominance', 0.0))
         profile['dominant_emotion'] = str(emotion_result.get('dominant_emotion', 'neutral'))
         profile['is_crisis_risk'] = bool(emotion_result.get('is_crisis_risk', False))
         profile['detected_crisis_keywords'] = list(
@@ -1488,6 +1495,13 @@ class Orchestrator:
         )
         profile['confidence'] = float(emotion_result.get('confidence', 0.0))
         profile['method'] = str(emotion_result.get('method', 'unknown'))
+        # EmotionService 為 signed；若呼叫端顯式標 unit 則保留
+        explicit_scale = str(
+            emotion_result.get('vad_scale')
+            or emotion_result.get('valence_scale')
+            or ''
+        ).strip().lower()
+        profile['vad_scale'] = explicit_scale if explicit_scale in {'signed', 'unit'} else 'signed'
         if isinstance(emotion_result.get('emotion_vector'), dict):
             profile['emotion_vector'] = dict(emotion_result['emotion_vector'])
         if isinstance(emotion_result.get('emotion_dimensions'), dict):
@@ -2272,6 +2286,58 @@ class Orchestrator:
                         "error": str(shadow_exc),
                     })
 
+            # P9.3：載入 Nightly disposition（Redis → session_state；完整 JSON）
+            try:
+                disposition_loaded = None
+                if self.redis_client:
+                    from PersonalityModule.disposition_system import redis_key_for_user
+                    import json as _json
+
+                    raw_disp = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None,
+                            self.redis_client.get,
+                            redis_key_for_user(user_id),
+                        ),
+                        timeout=PerformanceConfig.SESSION_STATE_FETCH_TIMEOUT,
+                    )
+                    if raw_disp:
+                        if isinstance(raw_disp, bytes):
+                            raw_disp = raw_disp.decode("utf-8")
+                        parsed = _json.loads(raw_disp)
+                        if isinstance(parsed, dict):
+                            disposition_loaded = parsed
+                if disposition_loaded is None and self.redis_client:
+                    # fallback：next_day_prep 內嵌 disposition
+                    import json as _json
+
+                    prep_raw = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None,
+                            self.redis_client.get,
+                            f"next_day_prep:{user_id}",
+                        ),
+                        timeout=PerformanceConfig.SESSION_STATE_FETCH_TIMEOUT,
+                    )
+                    if prep_raw:
+                        if isinstance(prep_raw, bytes):
+                            prep_raw = prep_raw.decode("utf-8")
+                        prep_obj = _json.loads(prep_raw)
+                        if isinstance(prep_obj, dict) and isinstance(
+                            prep_obj.get("disposition"), dict
+                        ):
+                            disposition_loaded = prep_obj["disposition"]
+                if isinstance(disposition_loaded, dict):
+                    session_state["disposition"] = disposition_loaded
+                    result["metadata"]["disposition_loaded"] = True
+            except Exception as disp_exc:
+                self.logger.debug({
+                    "event": "disposition_load_skipped",
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "error": str(disp_exc),
+                })
+
             # ========== 2. 並行收集基礎信息（優化版） ==========
             emotion_cache_key = self._build_emotion_cache_key(user_text)
             embedding_cache_key = self._build_embedding_cache_key(user_text)
@@ -2414,13 +2480,24 @@ class Orchestrator:
 
             reality_context = ""
             reality_facts: List[Dict[str, Any]] = []
+            recent_milestones: List[Dict[str, Any]] = []
+            # P9.2：人格層亦需要 milestones；唔依賴 KAG 開關
+            if self.db and hasattr(self.db, "list_psychological_milestones"):
+                try:
+                    recent_milestones = self.db.list_psychological_milestones(
+                        user_id, limit=3,
+                    )
+                except Exception as mil_exc:
+                    self.logger.warning({
+                        "event": "psychological_milestones_fetch_failed",
+                        "session_id": session_id,
+                        "user_id": user_id,
+                        "error": str(mil_exc),
+                    })
+                    recent_milestones = []
+
             if self.kag_reality and self.kag_reality.enabled:
                 try:
-                    recent_milestones: List[Dict[str, Any]] = []
-                    if self.cognitive_persistence and self.cognitive_persistence.enabled:
-                        recent_milestones = self.db.list_psychological_milestones(
-                            user_id, limit=3,
-                        )
                     shadow_for_kag = session_state.get("stored_shadow")
                     reality_result = await asyncio.wait_for(
                         loop.run_in_executor(
@@ -2532,6 +2609,8 @@ class Orchestrator:
                     user_text=user_text,
                     emotions_vsc=emotions_vsc
                 )
+                updated_session_state['triggered_fractures'] = triggered_fractures
+                updated_session_state['recent_milestones'] = recent_milestones
 
                 # ========== 4. 調用 IntelligentNavigator 進行雙軌決策 ==========
                 use_navigator = self.navigator is not None and (
@@ -2598,6 +2677,8 @@ class Orchestrator:
                                 'retrieved_memories': retrieved_memories,
                                 'risk_level': session_risk,
                                 'orchestrator_hints': orchestrator_hints,
+                                'triggered_fractures': triggered_fractures,
+                                'recent_milestones': recent_milestones,
                             },
                         )
                         if isinstance(pre_draft_guidance, dict):
@@ -2625,10 +2706,32 @@ class Orchestrator:
                                 'soul_memory_source': pre_draft_guidance.get(
                                     'soul_memory_source'
                                 ),
+                                'island_gains': pre_draft_guidance.get('island_gains') or {},
+                                'vad_normalized': pre_draft_guidance.get('vad_normalized') or {},
                                 'orchestrator_hints': pre_draft_guidance.get(
                                     'orchestrator_hints'
                                 ) or orchestrator_hints,
                             }
+                            memory_bundle_meta = pre_draft_guidance.get('memory_bundle') or {}
+                            if isinstance(memory_bundle_meta, dict) and memory_bundle_meta:
+                                result['metadata']['memory_bundle'] = {
+                                    'version': memory_bundle_meta.get('version'),
+                                    'soul_memory_id': memory_bundle_meta.get('soul_memory_id'),
+                                    'soul_source': memory_bundle_meta.get('soul_source'),
+                                    'soul_selected': memory_bundle_meta.get('soul_selected'),
+                                    'soul_skip_reason': memory_bundle_meta.get(
+                                        'soul_skip_reason'
+                                    ),
+                                    'past_topic_triggered': memory_bundle_meta.get(
+                                        'past_topic_triggered'
+                                    ),
+                                    'echo_ids': list(memory_bundle_meta.get('echo_ids') or []),
+                                    'echo_count': memory_bundle_meta.get('echo_count', 0),
+                                    'trace': memory_bundle_meta.get('trace') or {},
+                                }
+                                result['metadata']['memory_retrieval_version'] = (
+                                    memory_bundle_meta.get('version')
+                                )
                             result['metadata']['system_prompt_pre_draft'] = True
                             result['metadata']['prompt_contract'] = (
                                 pre_draft_guidance.get('prompt_contract')

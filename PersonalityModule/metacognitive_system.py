@@ -10,22 +10,23 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 
 from .utils.logger import get_logger
+from .vad_bridge import normalize_vad
+
 
 class MetacognitiveSystem:
     """
     【元認知系統 (Metacognitive System)】
-    
+
     參考《Inside Out》的控制台概念，這是不產生具體回應的「高階觀察者」。
-    
+
     三大核心成分：
     1. Knowledge (知識): 對自身能力與策略的了解 (Self-Model)。
     2. Experience (體驗): 感知當下的認知負荷與情緒衝突 (Island Entropy)。
     3. Regulation (監控): 動態調整 GSW 檢索深度、Heretic 嚴格度與回應策略。
-    
-    功能價值：
-    - 避免思維盲點：當島嶼衝突高時，強制啟動深度檢索。
-    - 決策優化：根據任務難度動態分配計算資源 (Attention Allocation)。
-    - 進化：記錄策略成功率，優化底層邏輯。
+
+    P6.2 閉環：
+    - 每輪 monitor_process 調參（含 strategy_stats 學習偏置）
+    - 每輪結束 evaluate_outcome 寫回知識庫，供下一輪調參
     """
 
     DRIFT_ALERT_WARNING = 0.45
@@ -35,6 +36,8 @@ class MetacognitiveSystem:
         "我以前住", "我家人", "我讀幼稚園", "我讀小學", "我讀中學",
     )
     MAX_TRACE_LOG = 1000
+    LEARNED_BIAS_MIN_SAMPLES = 3
+    META_VERSION = "1.1.0"
 
     def __init__(self, config: Dict, data_dir: str = './data'):
         self.logger = get_logger('metacognition')
@@ -216,9 +219,19 @@ class MetacognitiveSystem:
             # H = -sum(p * log2(p))
             entropy = -sum(p * math.log2(p + 1e-10) for p in probs)
         
-        # 2. 計算輸入複雜度
-        input_len = len(user_input)
-        sentiment_intensity = abs(extracted_info.get('user_sentiment', {}).get('intensity', 0))
+        # 2. 計算輸入複雜度（P6.2：用 VAD affect_intensity，勿假設 polarity intensity 鍵）
+        input_len = len(user_input or "")
+        sentiment = extracted_info.get('user_sentiment', {})
+        if not isinstance(sentiment, dict):
+            sentiment = {}
+        try:
+            vad = normalize_vad(sentiment)
+            sentiment_intensity = float(vad.affect_intensity)
+        except Exception:
+            try:
+                sentiment_intensity = abs(float(sentiment.get('intensity', 0) or 0))
+            except (TypeError, ValueError):
+                sentiment_intensity = 0.0
         cognitive_load = min(1.0, (input_len / 200.0) + (sentiment_intensity * 0.5))
         
         # 3. 直覺邊界檢查 (New)
@@ -312,6 +325,13 @@ class MetacognitiveSystem:
             )
 
         self.current_state["active_strategy"] = strategy
+        # P6.2：用歷史 strategy_stats 偏置本輪控制參數（閉環前半）
+        control_params = self._apply_learned_strategy_bias(control_params, strategy)
+        control_params["active_strategy"] = strategy
+        control_params["meta_version"] = self.META_VERSION
+        control_params["island_entropy"] = round(entropy, 6)
+        control_params["cognitive_load"] = round(cognitive_load, 6)
+
         self._append_trace("strategy_decision_log", {
             "timestamp": datetime.now().isoformat(),
             "decision_correlation_id": correlation_id,
@@ -321,63 +341,162 @@ class MetacognitiveSystem:
             "gsw_top_k": control_params.get("gsw_top_k"),
             "restrict_memory": control_params.get("restrict_memory"),
             "force_reflection": control_params.get("force_reflection"),
+            "heretic_temperature": control_params.get("heretic_temperature"),
+            "learned_bias": control_params.get("learned_bias"),
+            "meta_version": self.META_VERSION,
         })
         
         return control_params
 
-    def evaluate_outcome(self, 
-                        final_response: str, 
-                        feedback_metrics: Dict) -> None:
+    def _apply_learned_strategy_bias(
+        self,
+        control_params: Dict[str, Any],
+        strategy: str,
+    ) -> Dict[str, Any]:
         """
-        【元認知評估 (Evaluation)】
-        在回應生成後，評估這次的思考策略是否有效，並更新知識庫。
-        
-        Args:
-            feedback_metrics: 包含 intimacy_delta, sentiment_delta, is_safe 等
+        依知識庫策略成功率／情緒改善均值，微調本輪參數。
+        樣本不足時不干預。
         """
-        strategy = self.current_state["active_strategy"]
+        params = dict(control_params or {})
+        stats_root = self.knowledge_base.get("strategy_stats") or {}
+        stats = stats_root.get(strategy) if isinstance(stats_root, dict) else None
+        if not isinstance(stats, dict):
+            params["learned_bias"] = "insufficient_samples"
+            return params
+
+        try:
+            total = int(stats.get("total", 0) or 0)
+            success = int(stats.get("success", 0) or 0)
+            avg_sent = float(stats.get("avg_sentiment_delta", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            params["learned_bias"] = "stats_parse_error"
+            return params
+
+        if total < self.LEARNED_BIAS_MIN_SAMPLES:
+            params["learned_bias"] = "insufficient_samples"
+            params["strategy_sample_total"] = total
+            return params
+
+        success_rate = success / max(1, total)
+        params["strategy_success_rate"] = round(success_rate, 4)
+        params["strategy_sample_total"] = total
+        params["strategy_avg_sentiment_delta"] = round(avg_sent, 6)
+
+        if success_rate < 0.4:
+            params["force_reflection"] = True
+            params["restrict_memory"] = True
+            params["heretic_temperature"] = min(
+                float(params.get("heretic_temperature", 0.7) or 0.7),
+                0.45,
+            )
+            params["gsw_top_k"] = min(int(params.get("gsw_top_k", 5) or 5), 4)
+            params["boundary_multiplier"] = float(params.get("boundary_multiplier", 1.0) or 1.0) * 0.85
+            params["learned_bias"] = "underperforming_strategy"
+            self.logger.info(
+                f"[META] Learned bias: underperforming '{strategy}' "
+                f"(rate={success_rate:.2f}, n={total}) → tighten controls"
+            )
+        elif avg_sent < -0.05:
+            params["force_reflection"] = True
+            params["boundary_multiplier"] = float(params.get("boundary_multiplier", 1.0) or 1.0) * 0.9
+            params["heretic_temperature"] = min(
+                float(params.get("heretic_temperature", 0.7) or 0.7),
+                0.55,
+            )
+            params["learned_bias"] = "negative_sentiment_trend"
+            self.logger.info(
+                f"[META] Learned bias: negative sentiment trend on '{strategy}' "
+                f"(avg_delta={avg_sent:.3f}) → cautious nudge"
+            )
+        elif success_rate >= 0.7 and avg_sent >= 0.0:
+            params["learned_bias"] = "reinforce_current_strategy"
+        else:
+            params["learned_bias"] = "neutral_hold"
+
+        return params
+
+    def evaluate_outcome(
+        self,
+        final_response: str,
+        feedback_metrics: Dict,
+    ) -> Dict[str, Any]:
+        """
+        【元認知評估 (Evaluation)】P6.2 閉環後半
+
+        在回應生成後，評估本輪策略是否有效，並更新知識庫。
+        回傳完整評估紀錄（Zero-Truncation：不截斷 final_response 本體；
+        日誌存 chars + 完整文本引用長度，不對用戶可見正文做硬截斷）。
+        """
+        metrics = feedback_metrics if isinstance(feedback_metrics, dict) else {}
+        strategy = str(
+            metrics.get("active_strategy")
+            or self.current_state.get("active_strategy")
+            or "intuitive"
+        )
         correlation_id = str(
-            feedback_metrics.get("decision_correlation_id")
-            or feedback_metrics.get("correlation_id")
+            metrics.get("decision_correlation_id")
+            or metrics.get("correlation_id")
             or self.current_state.get("last_decision_correlation_id")
             or f"meta_eval_{uuid.uuid4().hex[:10]}"
         )
-        
-        intimacy_delta = feedback_metrics.get("intimacy_delta", 0.0)
-        sentiment_delta = feedback_metrics.get("sentiment_delta", 0.0) # 用戶情緒改善程度
-        is_safe = feedback_metrics.get("is_safe", True)
-        
-        # 定義"成功" (多維度)
-        success_score = 0
-        if is_safe:
-            if intimacy_delta > 0: success_score += 1
-            if sentiment_delta > 0: success_score += 1
-            # Cautious 模式下，止損就是勝利
-            if strategy == "cautious" and intimacy_delta >= 0: success_score += 0.5
 
-        is_success = success_score >= 1
-        
-        # 更新統計數據
+        try:
+            intimacy_delta = float(metrics.get("intimacy_delta", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            intimacy_delta = 0.0
+        try:
+            sentiment_delta = float(metrics.get("sentiment_delta", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            sentiment_delta = 0.0
+        is_safe = bool(metrics.get("is_safe", True))
+
+        response_text = final_response if isinstance(final_response, str) else str(final_response or "")
+        response_chars = len(response_text)
+
+        # 定義"成功" (多維度)
+        success_score = 0.0
+        if is_safe:
+            if intimacy_delta > 0:
+                success_score += 1.0
+            if sentiment_delta > 0:
+                success_score += 1.0
+            # Cautious 模式下，止損就是勝利
+            if strategy == "cautious" and intimacy_delta >= 0:
+                success_score += 0.5
+            # 衝突修復／熱線清洗成功可計分
+            if metrics.get("conflict_repaired"):
+                success_score += 0.5
+        else:
+            success_score = 0.0
+
+        is_success = success_score >= 1.0
+
         if "strategy_stats" not in self.knowledge_base:
-             self.knowledge_base["strategy_stats"] = {
+            self.knowledge_base["strategy_stats"] = {
                 "intuitive": {"success": 0, "total": 0, "avg_sentiment_delta": 0.0},
                 "analytical": {"success": 0, "total": 0, "avg_sentiment_delta": 0.0},
-                "cautious": {"success": 0, "total": 0, "avg_sentiment_delta": 0.0}
+                "cautious": {"success": 0, "total": 0, "avg_sentiment_delta": 0.0},
             }
 
-        stats = self.knowledge_base["strategy_stats"].get(strategy, {"success": 0, "total": 0, "avg_sentiment_delta": 0.0})
-        
-        # 移動平均更新 sentiment delta
-        n = stats["total"]
-        new_avg = (stats.get("avg_sentiment_delta", 0.0) * n + sentiment_delta) / (n + 1)
-        
-        stats["total"] += 1
+        stats = self.knowledge_base["strategy_stats"].get(
+            strategy,
+            {"success": 0, "total": 0, "avg_sentiment_delta": 0.0},
+        )
+        if not isinstance(stats, dict):
+            stats = {"success": 0, "total": 0, "avg_sentiment_delta": 0.0}
+
+        n = int(stats.get("total", 0) or 0)
+        prev_avg = float(stats.get("avg_sentiment_delta", 0.0) or 0.0)
+        new_avg = (prev_avg * n + sentiment_delta) / (n + 1)
+
+        stats["total"] = n + 1
         if is_success:
-            stats["success"] += 1
+            stats["success"] = int(stats.get("success", 0) or 0) + 1
         stats["avg_sentiment_delta"] = new_avg
-        
+
         self.knowledge_base["strategy_stats"][strategy] = stats
-        self._append_trace("strategy_evaluation_log", {
+
+        evaluation = {
             "timestamp": datetime.now().isoformat(),
             "decision_correlation_id": correlation_id,
             "strategy": strategy,
@@ -386,14 +505,38 @@ class MetacognitiveSystem:
             "intimacy_delta": intimacy_delta,
             "sentiment_delta": sentiment_delta,
             "is_safe": is_safe,
-        })
-        
+            "response_chars": response_chars,
+            "conflict_repaired": bool(metrics.get("conflict_repaired", False)),
+            "drift_alert_level": str(metrics.get("drift_alert_level", "none")),
+            "primary_island": str(metrics.get("primary_island") or ""),
+            "meta_version": self.META_VERSION,
+            "strategy_stats_snapshot": {
+                "success": stats["success"],
+                "total": stats["total"],
+                "avg_sentiment_delta": stats["avg_sentiment_delta"],
+                "success_rate": (
+                    float(stats["success"]) / float(stats["total"])
+                    if stats["total"]
+                    else 0.0
+                ),
+            },
+        }
+        # Zero-Truncation：不對用戶可見正文做 [:N]；知識庫只記 chars，不複製整段回應
+        self._append_trace("strategy_evaluation_log", dict(evaluation))
+        self.current_state["last_evaluation"] = dict(evaluation)
+
         success_rate = (stats["success"] / stats["total"]) * 100
-        self.logger.debug(f"[META] Eval '{strategy}'. Success: {is_success} (Score: {success_score}). Rate: {success_rate:.1f}%. SentDelta: {sentiment_delta:.3f}")
-        
+        self.logger.info(
+            f"[META] Eval '{strategy}'. Success: {is_success} "
+            f"(Score: {success_score}). Rate: {success_rate:.1f}%. "
+            f"SentDelta: {sentiment_delta:.3f}. Chars: {response_chars}"
+        )
+
         # 週期性保存
         if stats["total"] % 5 == 0:
             self._save_knowledge()
+
+        return evaluation
 
     def get_introspection_log(self) -> str:
         """

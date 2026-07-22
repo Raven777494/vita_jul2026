@@ -8,6 +8,7 @@ from typing import Dict, Tuple, List, Optional
 from datetime import datetime
 
 from .utils.logger import get_logger
+from .vad_bridge import compute_island_gains, normalize_vad
 
 logger = get_logger('personality')
 
@@ -71,7 +72,7 @@ class IslandFusion:
             }
         }
 
-        self.logger.info("IslandFusion v2.0 initialized")
+        self.logger.info("IslandFusion v2.1 initialized (VAD bridge)")
 
     def _load_island_mapping(self) -> Dict:
         """加載島嶼映射"""
@@ -136,21 +137,21 @@ class IslandFusion:
             for island, score in keyword_scores.items():
                 activation[island] += score * 0.2
 
-            # 第 2 層：情感親和度
+            # 第 2 層：情感親和度（P6.1：EmotionService VAD → 四島增益）
             emotion_scores = self._calculate_emotion_affinity(user_sentiment)
             for island, score in emotion_scores.items():
-                activation[island] += score * 0.3
+                activation[island] += score * 0.35
 
             # 第 3 層：對話歷史偏好
             if session_state:
                 history_scores = self._calculate_history_preference(session_state)
                 for island, score in history_scores.items():
-                    activation[island] += score * 0.2
+                    activation[island] += score * 0.15
 
             # 第 4 層：用戶需求
             need_scores = self._calculate_user_needs(conversation_context)
             for island, score in need_scores.items():
-                activation[island] += score * 0.3
+                activation[island] += score * 0.25
 
             # [FIXED-I1] 改善歸一化邏輯
             # 移除 NaN 並確保所有值都是有效數字
@@ -219,8 +220,7 @@ class IslandFusion:
         try:
             # [FIXED-I3] 參數驗證
             content = str(content).strip()
-            if len(content) > 100:
-                content = content[:97] + "…"
+            # Zero-Truncation：不硬截斷記憶正文；長度由上層 max_items 控管
 
             intimacy = max(0.0, min(1.0, float(intimacy)))
 
@@ -244,7 +244,8 @@ class IslandFusion:
             )
 
             self.logger.debug(
-                f"Memory weaved: {island_type}/{level} → {weaved[:60]}..."
+                f"Memory weaved: {island_type}/{level} "
+                f"chars={len(weaved)}"
             )
 
             return weaved
@@ -350,63 +351,27 @@ class IslandFusion:
         return scores
 
     def _calculate_emotion_affinity(self, user_sentiment: Dict) -> Dict[str, float]:
-        """根據情感計算親和度（相容 polarity/intensity 與 VAD valence/arousal）。"""
-        scores = {island: 0.0 for island in self.emotion_affinity.keys()}
-        sentiment = user_sentiment if isinstance(user_sentiment, dict) else {}
-
-        polarity = str(sentiment.get('polarity', '') or '').lower()
+        """
+        P6.1：經 vad_bridge 接 EmotionService VAD／情緒向量 → 四島增益。
+        刻度：valence/dominance [-1,1]，arousal [0,1]；相容舊 unit 0..1。
+        """
         try:
-            intensity = abs(float(sentiment.get('intensity', 0) or 0))
-        except (TypeError, ValueError):
-            intensity = 0.0
-
-        # Orchestrator / EmotionService 常只提供 VAD；補推 polarity / intensity。
-        try:
-            valence = float(sentiment.get('valence', 0.5))
-        except (TypeError, ValueError):
-            valence = 0.5
-        try:
-            arousal = float(sentiment.get('arousal', 0.3))
-        except (TypeError, ValueError):
-            arousal = 0.3
-
-        if not polarity:
-            if valence <= 0.35:
-                polarity = 'negative'
-            elif valence >= 0.65:
-                polarity = 'positive'
-            else:
-                polarity = 'neutral'
-        if intensity <= 0.0:
-            intensity = max(0.0, min(1.0, abs(valence - 0.5) * 1.6 + arousal * 0.5))
-
-        intensity = max(0.0, min(1.0, intensity))
-
-        if polarity == 'positive':
-            scores['Friend'] = 0.9
-            scores['Self'] = 0.8
-            scores['Mother'] = 0.5
-            scores['Empath'] = 0.4
-
-        elif polarity == 'negative':
-            scores['Mother'] = 0.95
-            scores['Empath'] = 0.9
-            scores['Friend'] = 0.6
-            scores['Self'] = 0.5
-
-        else:
-            scores = {island: 0.5 for island in scores.keys()}
-
-        # 高喚醒負向時再抬 Empath / Mother
-        if polarity == 'negative' and arousal >= 0.7:
-            scores['Empath'] = min(1.0, scores['Empath'] + 0.15)
-            scores['Mother'] = min(1.0, scores['Mother'] + 0.1)
-
-        # 根據強度調整
-        for island in scores:
-            scores[island] *= intensity
-
-        return scores
+            result = compute_island_gains(user_sentiment if isinstance(user_sentiment, dict) else {})
+            return {k: float(result.gains.get(k, 0.0)) for k in self.emotion_affinity.keys()}
+        except Exception as exc:
+            self.logger.warning(f"vad_bridge island gains failed: {exc}")
+            # 保守回退：正規化後按極性給基礎分
+            try:
+                vad = normalize_vad(user_sentiment if isinstance(user_sentiment, dict) else {})
+            except Exception:
+                return {island: 0.25 for island in self.emotion_affinity.keys()}
+            scores = {island: 0.25 for island in self.emotion_affinity.keys()}
+            if vad.polarity == "positive":
+                scores = {"Friend": 0.9, "Self": 0.8, "Mother": 0.5, "Empath": 0.4}
+            elif vad.polarity == "negative":
+                scores = {"Mother": 0.95, "Empath": 0.9, "Friend": 0.6, "Self": 0.5}
+            intensity = max(0.15, vad.affect_intensity)
+            return {k: v * intensity for k, v in scores.items()}
 
     def _calculate_history_preference(self, session_state: Dict) -> Dict[str, float]:
         """根據歷史計算偏好（促進多樣化）"""

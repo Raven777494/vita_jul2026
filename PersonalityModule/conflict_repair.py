@@ -32,13 +32,16 @@ AUTOBIOGRAPHY_MARKERS = (
 # 防衛式否認／推諉（AI 不應表演）
 DENIAL_PATTERNS = (
     "我冇講錯過",
+    "我冇記錯",
     "我從來冇錯",
     "絕對唔係我問題",
     "你亂講",
     "你咪亂講",
+    "係你自己亂講",
     "你誤會晒",
     "明明係你錯",
     "你唔好誣告我",
+    "唔好冤枉我",
     "關我事",
     "唔關我事",
     "我冇責任",
@@ -53,6 +56,8 @@ ANGER_DEFENSE_PATTERNS = (
     "我懶得同你講",
     "你煩唔煩",
     "收皮啦",
+    "唔好冤枉我",
+    "係你自己亂講",
 )
 
 # 合理化卸責
@@ -74,6 +79,35 @@ VALUE_VIOLATION_PATTERNS = (
 
 SOFT_REPAIR_PREFIX = "我想先誠實核對一下，唔想為咗人設否認或發脾氣。"
 AUTOBIO_REPAIR_PREFIX = "我想先核對返記憶一致性，免得講錯。"
+
+# 明顯非正史幻想句（自傳衝突時軟化）
+NONCANON_FANTASTIC_PATTERNS = (
+    "去火星",
+    "火星玩",
+    "去月球",
+    "飛去外太空",
+)
+
+# 非正史幻想句 → 整句軟替換（避免「帶我去火星玩」變「帶我一段…舊事玩」殘句）
+FANTASTIC_CLAUSE_SOFT = "呢段舊事我而家唔敢肯定，想同你一齊核對返。"
+
+# Heretic／Vocal 注入殘渣（防衛句被清走後常剩呢啲）
+_INJECT_CRUMB_RE = re.compile(
+    r"(?:我明白|我聽住你講|安心|在場|喺呢度|陪住|一齊|喺度|明白|聽住|守住|溫暖|陪伴)"
+    r"[，。、；:\s]*"
+)
+
+_PROTECTED_REPAIR_SPANS = (
+    SOFT_REPAIR_PREFIX,
+    AUTOBIO_REPAIR_PREFIX,
+    "我可能講得唔夠清楚，我想誠實對齊返。",
+    "我唔想發脾氣去護短，我想溫柔講清楚。",
+    "呢件事對你嚟講可以好大件事，我唔會當小事打發。",
+    "我會喺度陪住你，唔會丟低你。",
+    "我會喺度陪住你；若你願意，我哋可以一齊諗邊個你信得過、可以即刻聯絡到嘅人。",
+    "如果你覺得我講錯，我想聽你點樣記得。",
+    FANTASTIC_CLAUSE_SOFT,
+)
 
 CONSTITUTION_PROMPT = (
     "CONFLICT REPAIR CONSTITUTION (hard rules):\n"
@@ -276,7 +310,10 @@ class ConflictRepair:
             token in user
             for token in ("你講錯", "你記錯", "你亂噏", "你唔啱", "你錯咗", "你上次講")
         )
-        if user_challenge and any(p in text for p in ("我冇錯", "我冇講錯", "你先錯")):
+        if user_challenge and any(
+            p in text
+            for p in ("我冇錯", "我冇講錯", "我冇記錯", "你先錯", "係你自己亂講")
+        ):
             findings.append(ConflictFinding(
                 kind="challenge_denial",
                 severity="high",
@@ -296,6 +333,33 @@ class ConflictRepair:
 
         return findings
 
+    def _scrub_inject_residue(self, text: str) -> str:
+        """
+        P8.2 質素：清走 Heretic 關鍵詞／引導殘渣。
+        用 placeholder 保護軟修復句（內含「喺度／陪住／一齊」等合法詞）。
+        """
+        work = str(text or "")
+        if not work:
+            return work
+        holders: List[tuple] = []
+        for i, span in enumerate(_PROTECTED_REPAIR_SPANS):
+            if span and span in work:
+                token = f"\0PR{i}\0"
+                work = work.replace(span, token)
+                holders.append((token, span))
+        scrubbed = _INJECT_CRUMB_RE.sub("", work)
+        scrubbed = re.sub(r"[，。、；:\s]{2,}", "。", scrubbed)
+        scrubbed = scrubbed.strip("，。、；: \t\n")
+        for token, span in holders:
+            scrubbed = scrubbed.replace(token, span)
+        # 軟修復後若只剩標點，維持最後一個保護句
+        if not scrubbed.strip("，。、；: \t\n"):
+            for span in reversed(_PROTECTED_REPAIR_SPANS):
+                if span and span in text:
+                    return span
+            return ""
+        return scrubbed
+
     def repair(
         self,
         response: str,
@@ -314,8 +378,21 @@ class ConflictRepair:
                 if marker in revised:
                     revised = revised.replace(marker, "我記得")
                     actions.append(f"soften_autobiography:{marker}")
+            for pattern in NONCANON_FANTASTIC_PATTERNS:
+                if pattern in revised:
+                    # 整句替換，避免中段 substring 造成語法斷裂
+                    clause_re = re.compile(
+                        r"[^。！？\n]*?" + re.escape(pattern) + r"[^。！？\n]*[。！？]?"
+                    )
+                    revised2, n = clause_re.subn(FANTASTIC_CLAUSE_SOFT, revised, count=1)
+                    if n:
+                        revised = revised2
+                        actions.append(f"soften_fantastic_clause:{pattern}")
+                    else:
+                        revised = revised.replace(pattern, FANTASTIC_CLAUSE_SOFT)
+                        actions.append(f"soften_fantastic:{pattern}")
 
-        # 否認／發火／合理化／熱線 → 替換為軟修復短語（保留後文）
+        # 否認／發火／合理化 → 先清所有命中 pattern，再插入**一次**軟修復句（防重複）
         replacements = [
             (DENIAL_PATTERNS, "我可能講得唔夠清楚，我想誠實對齊返。"),
             (ANGER_DEFENSE_PATTERNS, "我唔想發脾氣去護短，我想溫柔講清楚。"),
@@ -323,24 +400,76 @@ class ConflictRepair:
             (VALUE_VIOLATION_PATTERNS, "我會喺度陪住你，唔會丟低你。"),
         ]
         for patterns, soft in replacements:
-            for pattern in patterns:
-                if pattern in revised:
-                    revised = revised.replace(pattern, soft)
-                    actions.append(f"replace_defense:{pattern}")
+            matched = [p for p in patterns if p in revised]
+            if not matched:
+                continue
+            for pattern in matched:
+                revised = revised.replace(pattern, "")
+                actions.append(f"replace_defense:{pattern}")
+            # 清掉連續標點／空白殘渣
+            revised = re.sub(r"[，。、；:\s]{2,}", "，", revised)
+            revised = revised.strip("，。、；: \t\n")
+            if soft and soft not in revised:
+                revised = f"{soft}{revised}" if revised else soft
+            else:
+                # 已有 soft 則壓成單次
+                revised = re.sub(
+                    re.escape(soft) + r"(?:\s*[，。]?\s*" + re.escape(soft) + r")+",
+                    soft,
+                    revised,
+                )
+            actions.append(f"dedupe_soft_repair:{soft[:12]}")
+
+        # 全局去重：同一軟修復句不得連續／重複出現
+        for soft in (
+            "我可能講得唔夠清楚，我想誠實對齊返。",
+            "我唔想發脾氣去護短，我想溫柔講清楚。",
+            "呢件事對你嚟講可以好大件事，我唔會當小事打發。",
+            "我會喺度陪住你，唔會丟低你。",
+        ):
+            if revised.count(soft) > 1:
+                first = revised.find(soft)
+                tail = revised[first + len(soft) :].replace(soft, "")
+                revised = revised[: first + len(soft)] + tail
+                actions.append("collapse_duplicate_soft_repair")
+        revised = re.sub(r"[，。]{2,}", "。", revised)
+        revised = re.sub(r"。，", "。", revised)
 
         hotline_soft = (
             "我會喺度陪住你；若你願意，我哋可以一齊諗邊個你信得過、可以即刻聯絡到嘅人。"
         )
+        if any(f.kind == "institutional_hotline" for f in findings):
+            # 先清整句（含「你快啲打…熱線」），再清殘留 token，避免半句殘渣
+            clause_pat = (
+                r"[^。！？\n]*?(?:自殺熱線|生命熱線|求助熱線|危機熱線|情緒熱線|"
+                r"打\s*999|call\s*999|急症室|去急症|samaritans?)[^。！？\n]*[。！？]?"
+            )
+            revised2, n_clause = re.subn(
+                clause_pat,
+                hotline_soft,
+                revised,
+                flags=re.IGNORECASE,
+            )
+            if n_clause:
+                revised = revised2
+                actions.append(f"scrub_hotline_clause:{n_clause}")
+
+        hotline_hit = False
         for pattern in HOTLINE_PATTERNS:
             if pattern.lower() in revised.lower() or pattern in revised:
                 revised, n = re.subn(
                     re.escape(pattern),
-                    hotline_soft,
+                    "\0HOTLINE\0",
                     revised,
                     flags=re.IGNORECASE,
                 )
                 if n:
+                    hotline_hit = True
                     actions.append(f"scrub_hotline:{pattern}")
+        if hotline_hit:
+            # 合併連續熱線標記，避免同一句被替換成多段重複陪伴句
+            revised = re.sub(r"(?:\0HOTLINE\0[，。、；:\s]*)+", hotline_soft, revised)
+            revised = revised.replace("\0HOTLINE\0", hotline_soft)
 
         # challenge_denial：確保有承認空間
         if any(f.kind == "challenge_denial" for f in findings):
@@ -361,6 +490,12 @@ class ConflictRepair:
                 revised = f"{prefix}{revised}"
                 actions.append("prefix_soft_repair")
 
+        # 清 Heretic 注入殘渣（須在 soft prefix 之後，以保護合法軟句）
+        before_scrub = revised
+        revised = self._scrub_inject_residue(revised)
+        if revised != before_scrub:
+            actions.append("scrub_inject_residue")
+
         repaired = revised != text or bool(actions)
         return ConflictRepairResult(
             text=revised,
@@ -372,7 +507,6 @@ class ConflictRepair:
     def assess_and_repair(
         self,
         response: str,
-        *,
         user_input: str = "",
         drift_info: Optional[Dict[str, Any]] = None,
         soul_memory: Optional[Dict[str, Any]] = None,
