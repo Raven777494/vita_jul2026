@@ -58,11 +58,15 @@ Expected:
 [OK] Escalation drill complete (local-capture) drill_id=WEBHOOK-DRILL-...
 ```
 
-Archive proof:
+Archive proof (creates `_ops_archive` if needed):
 
 ```powershell
-Copy-Item D:\vita\logs\webhook-drill-proof.jsonl D:\ops\WEBHOOK-DRILL-2026-07-001.jsonl
+.\scripts\ops\archive_ops_record.ps1 `
+  -Source "logs\webhook-drill-proof.jsonl" `
+  -Name "WEBHOOK-DRILL-2026-07-001.jsonl"
 ```
+
+Do **not** use `D:\ops\...` unless that directory exists on your machine.
 
 ## Path B — External webhook URL
 

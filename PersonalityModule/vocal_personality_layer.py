@@ -67,7 +67,7 @@ class VocalPersonalityLayer:
     # 島嶼特徵詞庫（**微調用，非替換**）
     ISLAND_SIGNATURE_WORDS = {
         'Mother': {
-            'warmth': ['寶貝', '永遠', '媽媽', '愛妳', '放心'],
+            'warmth': ['我喺度', '陪住你', '安心', '慢慢嚟', '放心'],
             'exclusion': ['妳可以試試', '也許妳應該'],  # 不強行替換
         },
         'Friend': {
@@ -170,12 +170,13 @@ class VocalPersonalityLayer:
                 )
                 return ""
             
+            # Zero-Truncation: never hard-cut user-facing draft text.
             if len(draft_response) > 2000:
-                self.logger.warning(
-                    f"Response too long ({len(draft_response)} chars), truncating"
+                self.logger.debug(
+                    f"Long draft received ({len(draft_response)} chars); "
+                    "keeping full text (no truncation)"
                 )
-                draft_response = draft_response[:2000]
-            
+
             self._stats['total_finalizations'] += 1
             
             primary_island = context.get('primary_island', 'Empath')
@@ -386,7 +387,7 @@ class VocalPersonalityLayer:
             else:
                 # 預設：根據島嶼
                 if island == 'Mother':
-                    candidates = ['寶貝', '嗯', '其實', '真的']
+                    candidates = ['嗯', '其實', '我明白', '聽住']
                 elif island == 'Friend':
                     candidates = ['咁樣', '其實', '真的', '妳知道嗎']
                 elif island == 'Empath':
@@ -398,9 +399,9 @@ class VocalPersonalityLayer:
             if intimacy < 0.3:
                 # 低親密度：溫和粒子
                 candidates = [c for c in candidates if c in ['嗯', '其實', '好似']]
-            elif intimacy > 0.7:
+            elif intimacy > 0.85:
                 # 高親密度：可以用更熟悉的粒子
-                candidates = [c for c in candidates if c in ['寶貝', '咁樣', '天啊']]
+                candidates = [c for c in candidates if c in ['我明白', '咁樣', '天啊', '聽住']]
             
             if not candidates:
                 candidates = ['嗯', '其實']
@@ -564,15 +565,9 @@ class VocalPersonalityLayer:
             
             # 移除不自然的 LLM 人工轉接
             text = re.sub(r'(但是|然而|因此|所以)[，。]', r'\1，', text)
-            
-            # 根據島嶼調整節奏
-            if island == 'Mother':
-                # 母愛：加入更多溫暖的停頓
-                text = text.replace('，', '，…')
-            elif island == 'Self':
-                # 自我反省：保持思考的節奏
-                text = text.replace('，', '…')
-            
+
+            # P8.2／Zero-Truncation：不再把每個「，」改成「，…」（會污染粵語節奏）
+            # 節奏微調僅限過長句中偶發停頓標記，且不批量改寫全文。
             self._stats['cleanups'] += 1
             return text
         

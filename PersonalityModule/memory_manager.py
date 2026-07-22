@@ -83,10 +83,95 @@ class MemoryManager:
         self.rumination_multiplier = self.RUMINATION_MULTIPLIER
         self.activation_boost_factor = self.ACTIVATION_BOOST_FACTOR
 
+        # GSWEngine fallback 用的簡易記憶庫（無向量 DB 時降級，避免 AttributeError）
+        self._store: List[Dict] = []
+
         self.logger.info(
             f"[MemoryManager] v3.2 initialized "
             f"(decay_mode: {decay_mode.value})"
         )
+
+    # ==================== GSW 相容介面（fallback） ====================
+
+    def store(self, record: Dict) -> bool:
+        """
+        儲存一筆記憶（GSWEngine fallback 路徑）。
+        P3.4：拒絕以正史／核心 id 寫入或覆寫（echo ≠ 改寫童年正史）。
+        """
+        if not isinstance(record, dict):
+            return False
+
+        memory_id = str(record.get('id') or '')
+        if any(memory_id.startswith(p) for p in ('memory_', 'core_', 'gold_hk_', 'canon_')):
+            self.logger.error(
+                f"[MemoryManager] Refused store of immutable soul id: {memory_id}"
+            )
+            return False
+        if record.get('locked') or record.get('protected'):
+            # 允許新建 locked 旗標的 echo；但禁止 source=canon 寫入
+            source = str(
+                (record.get('metadata') or {}).get('source', '')
+                if isinstance(record.get('metadata'), dict)
+                else record.get('source', '')
+            ).lower()
+            if source in {'seele_childhood_canon', 'canonical', 'canon'}:
+                self.logger.error(
+                    f"[MemoryManager] Refused store of canon-sourced record: {memory_id}"
+                )
+                return False
+
+        payload = dict(record)
+        meta = payload.get('metadata')
+        if not isinstance(meta, dict):
+            meta = {}
+        meta.setdefault('source', 'eternal_echo')
+        meta.setdefault('memory_type', 'eternal_echo')
+        payload['metadata'] = meta
+
+        self._store.append(payload)
+        # 防止無界成長
+        if len(self._store) > 2000:
+            self._store = self._store[-2000:]
+        return True
+
+    def search(self, query_vector: List[float], k: int = 5) -> List[Dict]:
+        """
+        簡易相似度搜尋（GSWEngine fallback）。
+        無 embedding 的記錄會被跳過；結果附 similarity 欄位。
+        """
+        if not query_vector or not self._store:
+            return []
+        scored: List[Tuple[float, Dict]] = []
+        for mem in self._store:
+            if mem.get('archived'):
+                continue
+            emb = mem.get('embedding')
+            if not isinstance(emb, list) or not emb:
+                continue
+            if len(emb) != len(query_vector):
+                continue
+            try:
+                sim = self._cosine_similarity_01(query_vector, emb)
+            except Exception:
+                continue
+            item = dict(mem)
+            item['similarity'] = sim
+            scored.append((sim, item))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item for _, item in scored[: max(1, int(k))]]
+
+    def apply_decay(self) -> int:
+        """對內部 store 套用心理學衰減（GSWEngine.apply_decay_to_db fallback）。"""
+        return self.apply_decay_to_memories(self._store)
+
+    @staticmethod
+    def _cosine_similarity_01(vec1: List[float], vec2: List[float]) -> float:
+        dot = sum(float(a) * float(b) for a, b in zip(vec1, vec2))
+        n1 = math.sqrt(sum(float(a) ** 2 for a in vec1))
+        n2 = math.sqrt(sum(float(b) ** 2 for b in vec2))
+        if n1 == 0.0 or n2 == 0.0:
+            return 0.0
+        return max(0.0, min(1.0, (dot / (n1 * n2) + 1.0) / 2.0))
 
     # ==================== 時間處理工具 [FIXED-M1] ====================
 

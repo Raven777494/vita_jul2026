@@ -8,6 +8,7 @@ from typing import Dict, Tuple, List, Optional
 from datetime import datetime
 
 from .utils.logger import get_logger
+from .vad_bridge import compute_island_gains, normalize_vad
 
 logger = get_logger('personality')
 
@@ -31,7 +32,7 @@ class IslandFusion:
 
         self.island_triggers = {
             'Mother': {
-                'keywords': ['媽媽', '抱', '陪伴', '溫暖', '愛', '照顧', '寶貝', '心痛'],
+                'keywords': ['抱', '陪伴', '溫暖', '愛', '照顧', '心痛', '喺度'],
                 'user_patterns': ['感到孤單', '需要陪伴', '害怕', '傷心', '無助'],
                 'response_patterns': ['保護', '無條件', '永遠', '陪著你'],
             },
@@ -71,7 +72,7 @@ class IslandFusion:
             }
         }
 
-        self.logger.info("IslandFusion v2.0 initialized")
+        self.logger.info("IslandFusion v2.1 initialized (VAD bridge)")
 
     def _load_island_mapping(self) -> Dict:
         """加載島嶼映射"""
@@ -85,7 +86,7 @@ class IslandFusion:
                 self.logger.warning(f"Failed to load island mapping: {e}")
 
         return {
-            'Mother': ['寶貝', '媽媽', '陪伴', '愛'],
+            'Mother': ['陪伴', '關心', '守住', '安心'],
             'Friend': ['姐妹', '共鳴', '一起'],
             'Empath': ['理解', '傾聽', '療癒'],
             'Self': ['成長', '學會', '相信']
@@ -112,13 +113,17 @@ class IslandFusion:
         """
         self.logger.debug("Calculating island activation...")
 
-        if not response_vector or not isinstance(response_vector, list):
-            self.logger.warning("Invalid response_vector, using balanced activation")
-            activation = {
-                'Mother': 0.25, 'Friend': 0.25,
-                'Empath': 0.25, 'Self': 0.25
-            }
-            return activation, 'Empath'
+        # response_vector 目前不參與打分；空向量時仍應依用戶上下文（關鍵詞/情緒/需求）激活。
+        # 舊行為直接回傳 balanced Empath，會令 draft 前置 / PersonaGraph 永遠落到預設島。
+        if not isinstance(response_vector, list):
+            self.logger.warning(
+                "Invalid response_vector type=%s; scoring from user context only",
+                type(response_vector).__name__,
+            )
+        elif not response_vector:
+            self.logger.debug(
+                "Empty response_vector; scoring from user context only (pre-draft path)"
+            )
 
         try:
             # [FIXED-I1] 初始化激活度
@@ -132,21 +137,21 @@ class IslandFusion:
             for island, score in keyword_scores.items():
                 activation[island] += score * 0.2
 
-            # 第 2 層：情感親和度
+            # 第 2 層：情感親和度（P6.1：EmotionService VAD → 四島增益）
             emotion_scores = self._calculate_emotion_affinity(user_sentiment)
             for island, score in emotion_scores.items():
-                activation[island] += score * 0.3
+                activation[island] += score * 0.35
 
             # 第 3 層：對話歷史偏好
             if session_state:
                 history_scores = self._calculate_history_preference(session_state)
                 for island, score in history_scores.items():
-                    activation[island] += score * 0.2
+                    activation[island] += score * 0.15
 
             # 第 4 層：用戶需求
             need_scores = self._calculate_user_needs(conversation_context)
             for island, score in need_scores.items():
-                activation[island] += score * 0.3
+                activation[island] += score * 0.25
 
             # [FIXED-I1] 改善歸一化邏輯
             # 移除 NaN 並確保所有值都是有效數字
@@ -215,15 +220,17 @@ class IslandFusion:
         try:
             # [FIXED-I3] 參數驗證
             content = str(content).strip()
-            if len(content) > 100:
-                content = content[:97] + "…"
+            # Zero-Truncation：不硬截斷記憶正文；長度由上層 max_items 控管
 
             intimacy = max(0.0, min(1.0, float(intimacy)))
 
-            # 決定親密度等級
-            if intimacy >= 0.7:
+            # 決定親密度等級（避免一開始過度親密）
+            if intimacy >= 0.9:
+                level = 'very_high'
+                prefix = "我想同你講件對我好重要嘅事，"
+            elif intimacy >= 0.75:
                 level = 'high'
-                prefix = "寶貝，"
+                prefix = "我想同你分享，"
             elif intimacy >= 0.4:
                 level = 'medium'
                 prefix = "你知道嗎，"
@@ -237,7 +244,8 @@ class IslandFusion:
             )
 
             self.logger.debug(
-                f"Memory weaved: {island_type}/{level} → {weaved[:60]}..."
+                f"Memory weaved: {island_type}/{level} "
+                f"chars={len(weaved)}"
             )
 
             return weaved
@@ -256,21 +264,25 @@ class IslandFusion:
         """[FIXED-I2] 應用島嶼編織風格"""
         weaving_map = {
             'Mother': {
-                'high': f"{prefix}那時候…{content}…媽媽都記得。",
+                'very_high': f"{prefix}那時候…{content}…我一直放在心裡。",
+                'high': f"{prefix}那時候…{content}…我都記得。",
                 'medium': f"{prefix}{content}那時，我有多心疼妳。",
                 'low': f"{prefix}{content}"
             },
             'Friend': {
+                'very_high': f"{prefix}咱們一路走來…{content}…我一直記得。",
                 'high': f"{prefix}咱們一起經歷過…{content}…我永遠不會忘。",
                 'medium': f"{prefix}{content}…咱們都很努力。",
                 'low': f"{prefix}{content}"
             },
             'Empath': {
+                'very_high': f"{prefix}我一直都感受到…{content}…妳對我好重要。",
                 'high': f"{prefix}我能感受到…{content}…妳的感受很重要。",
                 'medium': f"{prefix}關於{content}…我能理解妳。",
                 'low': f"{prefix}{content}…妳的感受正當。"
             },
             'Self': {
+                'very_high': f"{prefix}{content}…這段路我一直同自己對話。",
                 'high': f"{prefix}{content}…這就是妳在成長。",
                 'medium': f"{prefix}{content}…妳又長大了。",
                 'low': f"{prefix}{content}…值得妳反思。"
@@ -339,32 +351,27 @@ class IslandFusion:
         return scores
 
     def _calculate_emotion_affinity(self, user_sentiment: Dict) -> Dict[str, float]:
-        """根據情感計算親和度"""
-        scores = {island: 0.0 for island in self.emotion_affinity.keys()}
-
-        polarity = str(user_sentiment.get('polarity', 'neutral')).lower()
-        intensity = max(0.0, min(1.0, abs(user_sentiment.get('intensity', 0))))
-
-        if polarity == 'positive':
-            scores['Friend'] = 0.9
-            scores['Self'] = 0.8
-            scores['Mother'] = 0.5
-            scores['Empath'] = 0.4
-
-        elif polarity == 'negative':
-            scores['Mother'] = 0.95
-            scores['Empath'] = 0.9
-            scores['Friend'] = 0.6
-            scores['Self'] = 0.5
-
-        else:
-            scores = {island: 0.5 for island in scores.keys()}
-
-        # 根據強度調整
-        for island in scores:
-            scores[island] *= intensity
-
-        return scores
+        """
+        P6.1：經 vad_bridge 接 EmotionService VAD／情緒向量 → 四島增益。
+        刻度：valence/dominance [-1,1]，arousal [0,1]；相容舊 unit 0..1。
+        """
+        try:
+            result = compute_island_gains(user_sentiment if isinstance(user_sentiment, dict) else {})
+            return {k: float(result.gains.get(k, 0.0)) for k in self.emotion_affinity.keys()}
+        except Exception as exc:
+            self.logger.warning(f"vad_bridge island gains failed: {exc}")
+            # 保守回退：正規化後按極性給基礎分
+            try:
+                vad = normalize_vad(user_sentiment if isinstance(user_sentiment, dict) else {})
+            except Exception:
+                return {island: 0.25 for island in self.emotion_affinity.keys()}
+            scores = {island: 0.25 for island in self.emotion_affinity.keys()}
+            if vad.polarity == "positive":
+                scores = {"Friend": 0.9, "Self": 0.8, "Mother": 0.5, "Empath": 0.4}
+            elif vad.polarity == "negative":
+                scores = {"Mother": 0.95, "Empath": 0.9, "Friend": 0.6, "Self": 0.5}
+            intensity = max(0.15, vad.affect_intensity)
+            return {k: v * intensity for k, v in scores.items()}
 
     def _calculate_history_preference(self, session_state: Dict) -> Dict[str, float]:
         """根據歷史計算偏好（促進多樣化）"""

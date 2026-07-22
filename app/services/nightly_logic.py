@@ -101,13 +101,20 @@ class NightlyJudgment:
         # 2. 獲取已計算的進度 (State is now inside assessment)
         detox_progress = assessment.get('detox_progress_state', 0.0)
         
-        # 3. 生成明日預備卡
+        # 3. 生成明日預備卡（含 disposition）
         next_day_card = await self._prepare_next_day_card(user_id, assessment)
+        
+        # 3b. P9.3：Nightly disposition 鞏固並寫入 Redis
+        disposition_public = self._consolidate_and_store_disposition(
+            user_id, assessment, next_day_card
+        )
+        if isinstance(next_day_card, dict) and disposition_public:
+            next_day_card["disposition"] = disposition_public
         
         # 4. 更新數據庫 (包括 12 Tables 和 脫毒進度) - 包含 Rollback 機制
         self._update_user_status(user_id, assessment)
         
-        # 5. 存入 Redis (供 Navigator 明日使用)
+        # 5. 存入 Redis (供 Navigator／Personality 明日使用)
         if redis_client and next_day_card:
             redis_client.setex(
                 f"next_day_prep:{user_id}",
@@ -606,6 +613,60 @@ class NightlyJudgment:
             'content': content,
             'generated_at': datetime.utcnow().isoformat()
         }
+
+    def _consolidate_and_store_disposition(
+        self,
+        user_id: str,
+        assessment: Dict,
+        next_day_card: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """
+        P9.3：鞏固跨日 disposition，寫入 Redis（完整 JSON，不截斷欄位）。
+        """
+        try:
+            from PersonalityModule.disposition_system import (
+                consolidate_from_nightly_assessment,
+                redis_key_for_user,
+            )
+        except Exception as import_exc:
+            logger.warning(f"disposition_system import failed: {import_exc}")
+            return {}
+
+        prior_dict: Optional[Dict[str, Any]] = None
+        if redis_client:
+            try:
+                raw = redis_client.get(redis_key_for_user(user_id))
+                if raw:
+                    loaded = json.loads(raw)
+                    if isinstance(loaded, dict):
+                        prior_dict = loaded
+            except Exception as load_exc:
+                logger.debug(f"prior disposition load failed user={user_id}: {load_exc}")
+
+        # next_day_card 內嵌 prior（若有）
+        if prior_dict is None and isinstance(next_day_card, dict):
+            embedded = next_day_card.get("disposition")
+            if isinstance(embedded, dict):
+                prior_dict = embedded
+
+        state = consolidate_from_nightly_assessment(
+            assessment if isinstance(assessment, dict) else {},
+            prior_dict=prior_dict,
+        )
+        public = state.to_public_dict()
+
+        if redis_client:
+            try:
+                redis_client.setex(
+                    redis_key_for_user(user_id),
+                    timedelta(hours=36),
+                    json.dumps(public, ensure_ascii=False),
+                )
+            except Exception as store_exc:
+                logger.warning(
+                    f"disposition redis store failed user={user_id}: {store_exc}"
+                )
+        return public
 
     def _calculate_positive_glimmers_detailed(self, user_id: str, today_turns: List[Dict]) -> Dict:
         """Calculate positive glimmers from today's conversation"""

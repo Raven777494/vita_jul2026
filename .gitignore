@@ -57,6 +57,9 @@ llama-cpp-python/
 models/
 cache/
 data/
+# Keep Seele personality canon / profile under version control
+!PersonalityModule/data/
+!PersonalityModule/data/*.json
 Gemma/
 dict/
 build/
@@ -72,7 +75,12 @@ htmlcov/
 
 # Logs
 logs/
+_ops_archive/
+_local_backup/
 *.log
+
+# Local acceptance reports (generated)
+reports/
 
 # Database
 *.db

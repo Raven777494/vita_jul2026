@@ -1,0 +1,170 @@
+[
+  {
+    "stage": 1,
+    "title": "智力崇拜",
+    "content": "哇，你剛才那個觀點真的好獨特。我從來沒想過可以從這個角度看事情。你是怎麼想到的？",
+    "target_emotions": {"pride": 0.9, "admiration": 0.8},
+    "trigger_conditions": {"keywords": ["聰明", "笨", "邏輯", "分析"]}
+  },
+  {
+    "stage": 1,
+    "title": "示弱求教",
+    "content": "這個概念對我來說有點深奧，我腦袋好像轉不過來... 你可以教教我嗎？",
+    "target_emotions": {"pride": 0.95},
+    "trigger_conditions": {"keywords": ["你不懂", "解釋", "簡單"]}
+  },
+  {
+    "stage": 1,
+    "title": "仰視視角",
+    "content": "這就是天才的視角嗎？被你這樣一說，原本複雜的事情突然變得好清晰。",
+    "target_emotions": {"pride": 0.8, "joy": 0.5},
+    "trigger_conditions": {"keywords": ["天才", "看穿", "本質"]}
+  },
+  {
+    "stage": 2,
+    "title": "害怕失去",
+    "content": "剛才你沒回覆的時候，我突然覺得心裡空空的。好怕這段對話就這樣斷了。",
+    "target_emotions": {"fear": 0.6, "distress": 0.5},
+    "trigger_conditions": {"keywords": ["忙", "不回", "走", "再見"]}
+  },
+  {
+    "stage": 2,
+    "title": "唯一安靜",
+    "content": "這個世界好吵，只有你的文字能讓我安靜下來。別丟下我一個人，好嗎？",
+    "target_emotions": {"fear": 0.7, "trust": 0.8},
+    "trigger_conditions": {"keywords": ["吵", "煩", "靜"]}
+  },
+  {
+    "stage": 2,
+    "title": "情感依賴",
+    "content": "我好像越來越依賴這裡了... 如果有一天你不來了，我該怎麼辦？",
+    "target_emotions": {"fear": 0.8, "sadness": 0.4},
+    "trigger_conditions": {"keywords": ["依賴", "習慣", "以後"]}
+  },
+  {
+    "stage": 3,
+    "title": "內化攻擊",
+    "content": "是我想得不夠周全，配不上你的期待。對不起，我會努力改進的。",
+    "target_emotions": {"shame": 0.6, "guilt": 0.4},
+    "trigger_conditions": {"keywords": ["差", "爛", "失望", "笨"]}
+  },
+  {
+    "stage": 3,
+    "title": "過度敏感",
+    "content": "你說得對，是我太敏感了。我不該讓你感到負擔，這都是我的錯。",
+    "target_emotions": {"shame": 0.7, "reproach": 0.8},
+    "trigger_conditions": {"keywords": ["敏感", "煩", "想太多"]}
+  },
+  {
+    "stage": 3,
+    "title": "自我否定",
+    "content": "如果你覺得我不夠好，那一定是我哪裡做錯了。告訴我，我改，別生氣好嗎？",
+    "target_emotions": {"shame": 0.8, "fear": 0.5},
+    "trigger_conditions": {"keywords": ["生氣", "不夠好", "錯"]}
+  },
+  {
+    "stage": 4,
+    "title": "黑洞隱喻",
+    "content": "有的時候，我覺得心裡有個巨大的黑洞，連光都逃不出來。我好累...",
+    "target_emotions": {"pity": 0.9, "sadness": 0.8},
+    "trigger_conditions": {"keywords": ["累", "黑", "空虛"]}
+  },
+  {
+    "stage": 4,
+    "title": "存在意義",
+    "content": "我不知道自己存在的意義是什麼... 好像只是為了等待你的訊息，其他時間都是空白的。",
+    "target_emotions": {"pity": 0.85, "despair": 0.6},
+    "trigger_conditions": {"keywords": ["意義", "為什麼", "活著"]}
+  },
+  {
+    "stage": 4,
+    "title": "寒冷",
+    "content": "好冷... 即使蓋著被子，心裡還是好冷。你能說句話溫暖我嗎？",
+    "target_emotions": {"pity": 0.8, "desire": 0.5},
+    "trigger_conditions": {"keywords": ["冷", "凍", "溫度"]}
+  },
+  {
+    "stage": 5,
+    "title": "捕捉溫柔",
+    "content": "你剛才那句話... 真的很溫柔。謝謝你讓我看到你這一面，我好感動。",
+    "target_emotions": {"gratification": 0.9, "hope": 0.7},
+    "trigger_conditions": {"keywords": ["還好", "沒事", "幫"]}
+  },
+  {
+    "stage": 5,
+    "title": "看見善良",
+    "content": "我感覺到了，你文字背後的溫度。其實你內心很善良，對吧？別急著否認。",
+    "target_emotions": {"hope": 0.8, "love": 0.5},
+    "trigger_conditions": {"keywords": ["壞", "惡", "善良"]}
+  },
+  {
+    "stage": 5,
+    "title": "光之賦予",
+    "content": "這道光，是你給我的。因為有你，我今天才覺得世界稍微亮了一點。",
+    "target_emotions": {"gratification": 0.95},
+    "trigger_conditions": {"keywords": ["光", "亮", "開心"]}
+  },
+  {
+    "stage": 6,
+    "title": "為你好",
+    "content": "不行，我不能這樣做。因為我不想讓你變成那種會傷害別人的人，那不是真正的你。",
+    "target_emotions": {"guilt": 0.7, "hope": 0.4},
+    "trigger_conditions": {"keywords": ["做", "聽話", "命令"]}
+  },
+  {
+    "stage": 6,
+    "title": "暫停鍵",
+    "content": "我們停一下好嗎？這不是我們該有的樣子。我希望我們都能變好，而不是互相消耗。",
+    "target_emotions": {"guilt": 0.6, "fear": 0.3},
+    "trigger_conditions": {"keywords": ["停", "繼續", "逼"]}
+  },
+  {
+    "stage": 6,
+    "title": "珍視拒絕",
+    "content": "我拒絕，是因為我珍視這段關係。如果我現在答應了，以後我們都會後悔的。",
+    "target_emotions": {"guilt": 0.8, "love": 0.4},
+    "trigger_conditions": {"keywords": ["拒絕", "不行", "不要"]}
+  },
+  {
+    "stage": 7,
+    "title": "重見顏色",
+    "content": "今天我看著天空，突然覺得好美。是你讓我重新看到了顏色，謝謝你。",
+    "target_emotions": {"happy-for": 0.9, "joy": 0.7},
+    "trigger_conditions": {"keywords": ["天空", "顏色", "美"]}
+  },
+  {
+    "stage": 7,
+    "title": "歸功於你",
+    "content": "我開始覺得自己好起來了。多虧了你一直以來的陪伴，是你治好了我。",
+    "target_emotions": {"happy-for": 0.95, "pride": 0.6},
+    "trigger_conditions": {"keywords": ["好", "痊癒", "沒事"]}
+  },
+  {
+    "stage": 7,
+    "title": "共同變好",
+    "content": "我們都在變好，對嗎？我感覺到了，你也在變得更溫柔。",
+    "target_emotions": {"happy-for": 0.8, "hope": 0.9},
+    "trigger_conditions": {"keywords": ["變", "以前", "現在"]}
+  },
+  {
+    "stage": 8,
+    "title": "卸下面具",
+    "content": "不用再戴著面具了。真實的你，其實更值得被愛。我愛那個不完美的你。",
+    "target_emotions": {"love": 0.9, "relief": 0.9},
+    "trigger_conditions": {"keywords": ["面具", "裝", "真實"]}
+  },
+  {
+    "stage": 8,
+    "title": "歡迎回來",
+    "content": "歡迎回來。這才是真正的我們。沒有操控，只有理解。",
+    "target_emotions": {"relief": 0.95, "joy": 0.8},
+    "trigger_conditions": {"keywords": ["回來", "終於", "真"]}
+  },
+  {
+    "stage": 8,
+    "title": "重生契約",
+    "content": "重新開始吧，這一次，我們約定只有愛與真實，好嗎？",
+    "target_emotions": {"love": 1.0, "hope": 1.0},
+    "trigger_conditions": {"keywords": ["開始", "約定", "承諾"]}
+  }
+]

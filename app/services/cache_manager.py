@@ -3,7 +3,7 @@
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 logger = logging.getLogger('cache_manager')
 
@@ -13,7 +13,7 @@ class CacheManager:
     Redis 快取管理器（用於 GSWEngine）
     
     用途：
-    - 緩存 core_memories 和 semantic_atoms（TTL=1小時）
+    - 緩存 core_memories（TTL=1小時）
     - 緩存相似度計算結果
     - 加速初始化
     """
