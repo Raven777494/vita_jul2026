@@ -75,7 +75,12 @@ htmlcov/
 
 # Logs
 logs/
+_ops_archive/
+_local_backup/
 *.log
+
+# Local acceptance reports (generated)
+reports/
 
 # Database
 *.db
